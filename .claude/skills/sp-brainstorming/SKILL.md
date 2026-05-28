@@ -1,3 +1,8 @@
+---
+name: sp-brainstorming
+description: 需求→行为规格（BDD Feature + Given-When-Then）+ 技术方案。通过协作对话探索需求，逐段呈现设计，对抗性审查收敛。用于任何新功能、新需求、创造性工作。
+---
+
 # 头脑风暴：将想法转化为设计
 
 通过自然的协作对话，帮助将想法转化为完整的设计和规格说明。
@@ -21,10 +26,11 @@
 3. **提出澄清性问题** — 一次一个，理解目的/约束/成功标准
 4. **提出 2-3 种方案** — 包含权衡分析和你的推荐
 5. **展示设计** — 按各部分复杂度缩放篇幅，每部分完成后获取用户批准
-6. **撰写设计文档** — 保存到 `docs/superpowers/specs/YYYY-MM-DD-<主题>-design.md` 并提交
-7. **规格自审** — 快速检查占位符、矛盾、歧义、范围（见下方）
-8. **用户审阅已写规格** — 请用户在继续之前审阅规格文件
-9. **过渡到实现** — 调用 writing-plans 技能来创建实现计划
+6. **撰写规格文档** — 保存 .feature + -design.md 并提交
+7. **规格自审** — 快速检查占位符、矛盾、歧义、范围、可测试性（见下方）
+8. **对抗性审查** — 派遣子agent独立审查，循环直到无严重问题
+9. **用户审阅已写规格** — 请用户在继续之前审阅规格文件
+10. **过渡到实现** — 调用 sp-writing-plans 技能来创建实现计划
 
 ## 流程图
 
@@ -39,8 +45,9 @@ digraph brainstorming {
     "用户批准设计?" [shape=diamond];
     "撰写设计文档" [shape=box];
     "规格自审\n(就地修复)" [shape=box];
+    "对抗性审查" [shape=box];
     "用户审阅规格?" [shape=diamond];
-    "调用 writing-plans 技能" [shape=doublecircle];
+    "调用 sp-writing-plans 技能" [shape=doublecircle];
 
     "探索项目背景" -> "即将有视觉问题?";
     "即将有视觉问题?" -> "提供可视化伴侣\n(单独消息，无其他内容)" [label="是"];
@@ -50,15 +57,16 @@ digraph brainstorming {
     "提出 2-3 种方案" -> "展示设计各部分";
     "展示设计各部分" -> "用户批准设计?";
     "用户批准设计?" -> "展示设计各部分" [label="否，修改"];
-    "用户批准设计?" -> "撰写设计文档" [label="是"];
-    "撰写设计文档" -> "规格自审\n(就地修复)";
-    "规格自审\n(就地修复)" -> "用户审阅规格?";
-    "用户审阅规格?" -> "撰写设计文档" [label="要求修改"];
-    "用户审阅规格?" -> "调用 writing-plans 技能" [label="批准"];
+    "用户批准设计?" -> "撰写规格文档" [label="是"];
+    "撰写规格文档" -> "规格自审\n(就地修复)";
+    "规格自审\n(就地修复)" -> "对抗性审查";
+    "对抗性审查" -> "用户审阅规格?";
+    "用户审阅规格?" -> "撰写规格文档" [label="要求修改"];
+    "用户审阅规格?" -> "调用 sp-writing-plans 技能" [label="批准"];
 }
 ```
 
-**终止状态是调用 writing-plans。** 不要调用 frontend-design、mcp-builder 或任何其他实现技能。头脑风暴之后唯一调用的技能是 writing-plans。
+**终止状态是调用 sp-writing-plans。** 不要调用 frontend-design、mcp-builder 或任何其他实现技能。头脑风暴之后唯一调用的技能是 sp-writing-plans。
 
 ## 流程详解
 
@@ -83,8 +91,17 @@ digraph brainstorming {
 - 一旦你认为理解了要构建什么，就展示设计
 - 每部分篇幅与其复杂度匹配：如果简单直接就几句话，如果有细微差别则最多 200-300 词
 - 每部分完成后询问是否正确
-- 覆盖：架构、组件、数据流、错误处理、测试
+- 覆盖：**行为规格（BDD Scenarios）**、架构、组件、数据流、错误处理、测试
 - 如果有不清楚的地方，准备好回头澄清
+
+**段落顺序：**
+1. **行为规格** — 先呈现核心 Scenarios（正常路径+异常路径），确认行为预期正确
+   - ≤2 个 Feature：一次性呈现全部 Scenarios
+   - \>2 个 Feature：按 Feature 分次呈现，每个 Feature 单独确认
+2. 架构与组件
+3. 数据流与关键接口
+4. 错误处理
+5. 测试策略
 
 **为隔离性和清晰性而设计：**
 
@@ -99,11 +116,53 @@ digraph brainstorming {
 - 当现有代码存在影响工作的问题（例如文件过大、边界不清、职责纠缠），将有针对性的改进作为设计的一部分——就像一个优秀的开发者改进他正在工作的代码一样。
 - 不要提议无关的重构。保持聚焦于服务当前目标。
 
+## 产出格式
+
+### 行为规格（`.feature` 文件）
+
+```gherkin
+Feature: [功能名称]
+  [一句话描述功能目的]
+
+  Background:
+    Given [所有场景共享的前置条件]
+
+  Scenario: [正常路径 - 场景名]
+    Given [前置条件/上下文]
+    And [额外条件]
+    When [触发动作]
+    Then [预期结果]
+    And [额外断言]
+
+  Scenario: [异常路径 - 场景名]
+    Given [前置条件/上下文]
+    When [触发错误动作]
+    Then [预期错误处理]
+
+  Scenario Outline: [参数化场景名]
+    Given [前置条件]
+    When [动作 with <param>]
+    Then [预期结果 <expected>]
+
+    Examples:
+      | param   | expected        |
+      | value1  | result1         |
+      | value2  | result2         |
+      | 边界值  | 边界结果        |
+```
+
+**规格要求：**
+- 每个 Feature 至少 1 个正常路径 + 1 个异常路径 Scenario
+- 有多组输入/输出时使用 Scenario Outline + Examples
+- Scenario 用业务语言描述，不涉及实现细节
+- 每个 Then 必须可验证（可转化为 assert）
+
 ## 设计完成后
 
 **文档：**
 
-- 将验证后的设计（规格）写入 `docs/superpowers/specs/YYYY-MM-DD-<主题>-design.md`
+- 行为规格写入 `docs/specs/YYYY-MM-DD-<topic>.feature`
+- 技术方案写入 `docs/specs/YYYY-MM-DD-<topic>-design.md`
   - （用户对规格位置的偏好优先于此默认值）
 - 如果可用，使用 elements-of-style:writing-clearly-and-concisely 技能
 - 将设计文档提交到 git
@@ -115,8 +174,17 @@ digraph brainstorming {
 2. **内部一致性：** 各部分之间是否有矛盾？架构是否与功能描述匹配？
 3. **范围检查：** 这是否足够聚焦，可以用单个实现计划覆盖，还是需要分解？
 4. **歧义检查：** 是否有任何需求可以被两种方式解读？如果有，选定一种并明确表述。
+5. **可测试性：** 每个 BDD Scenario 的 Then 是否可直接转化为 assert？
 
 就地修复任何问题。无需重新审阅——修复后继续。
+
+**对抗性审查：**
+派遣独立子agent，使用 `sp-adversarial-review` 作为角色指令。提供：行为规格（.feature）+ 技术方案（-design.md）。
+
+循环规则：
+- 有严重问题 → 修正后重新提交审查
+- 无严重问题 → 终止迭代
+- 最多 3 轮
 
 **用户审阅关卡：**
 规格审阅循环通过后，请用户在继续之前审阅已写的规格：
@@ -127,8 +195,8 @@ digraph brainstorming {
 
 **实现：**
 
-- 调用 writing-plans 技能来创建详细的实现计划
-- 不要调用任何其他技能。writing-plans 是下一步。
+- 调用 sp-writing-plans 技能来创建详细的实现计划
+- 不要调用任何其他技能。sp-writing-plans 是下一步。
 
 ## 核心原则
 
