@@ -22,12 +22,12 @@ description: 需求→行为规格（BDD Feature + Given-When-Then）+ 技术方
 你必须为以下每个条目创建任务，并按顺序完成：
 
 1. **探索项目背景** — 检查文件、文档、最近的提交
-2. **提供可视化伴侣**（如果话题涉及视觉问题）— 这是单独的一条消息，不与澄清性问题合并。见下方"可视化伴侣"部分。
-3. **提出澄清性问题** — 一次一个，理解目的/约束/成功标准
+2. **提出澄清性问题** — 一次一个，理解目的/约束/成功标准
+3. **生成 BDD 场景** — 基于澄清结果，用 Gherkin 草拟行为场景，展示给用户确认后保存为 `.feature` 文件
 4. **提出 2-3 种方案** — 包含权衡分析和你的推荐
 5. **展示设计** — 按各部分复杂度缩放篇幅，每部分完成后获取用户批准
-6. **撰写规格文档** — 保存 .feature + -design.md 并提交
-7. **规格自审** — 快速检查占位符、矛盾、歧义、范围、可测试性（见下方）
+6. **撰写设计文档** — 保存到 `docs/specs/YYYY-MM-DD-<主题>-design.md` 并提交
+7. **规格自审** — 快速检查占位符、矛盾、歧义、范围（见下方）
 8. **对抗性审查** — 派遣子agent独立审查，循环直到无严重问题
 9. **用户审阅已写规格** — 请用户在继续之前审阅规格文件
 10. **过渡到实现** — 调用 sp-writing-plans 技能来创建实现计划
@@ -37,9 +37,9 @@ description: 需求→行为规格（BDD Feature + Given-When-Then）+ 技术方
 ```dot
 digraph brainstorming {
     "探索项目背景" [shape=box];
-    "即将有视觉问题?" [shape=diamond];
-    "提供可视化伴侣\n(单独消息，无其他内容)" [shape=box];
     "提出澄清性问题" [shape=box];
+    "生成 BDD 场景\n(.feature 文件)" [shape=box];
+    "用户确认 BDD?" [shape=diamond];
     "提出 2-3 种方案" [shape=box];
     "展示设计各部分" [shape=box];
     "用户批准设计?" [shape=diamond];
@@ -49,19 +49,19 @@ digraph brainstorming {
     "用户审阅规格?" [shape=diamond];
     "调用 sp-writing-plans 技能" [shape=doublecircle];
 
-    "探索项目背景" -> "即将有视觉问题?";
-    "即将有视觉问题?" -> "提供可视化伴侣\n(单独消息，无其他内容)" [label="是"];
-    "即将有视觉问题?" -> "提出澄清性问题" [label="否"];
-    "提供可视化伴侣\n(单独消息，无其他内容)" -> "提出澄清性问题";
-    "提出澄清性问题" -> "提出 2-3 种方案";
+    "探索项目背景" -> "提出澄清性问题";
+    "提出澄清性问题" -> "生成 BDD 场景\n(.feature 文件)";
+    "生成 BDD 场景\n(.feature 文件)" -> "用户确认 BDD?" [label="展示场景"];
+    "用户确认 BDD?" -> "生成 BDD 场景\n(.feature 文件)" [label="否，修改"];
+    "用户确认 BDD?" -> "提出 2-3 种方案" [label="是"];
     "提出 2-3 种方案" -> "展示设计各部分";
     "展示设计各部分" -> "用户批准设计?";
     "用户批准设计?" -> "展示设计各部分" [label="否，修改"];
-    "用户批准设计?" -> "撰写规格文档" [label="是"];
-    "撰写规格文档" -> "规格自审\n(就地修复)";
+    "用户批准设计?" -> "撰写设计文档" [label="是"];
+    "撰写设计文档" -> "规格自审\n(就地修复)";
     "规格自审\n(就地修复)" -> "对抗性审查";
     "对抗性审查" -> "用户审阅规格?";
-    "用户审阅规格?" -> "撰写规格文档" [label="要求修改"];
+    "用户审阅规格?" -> "撰写设计文档" [label="要求修改"];
     "用户审阅规格?" -> "调用 sp-writing-plans 技能" [label="批准"];
 }
 ```
@@ -80,6 +80,16 @@ digraph brainstorming {
 - 每条消息只问一个问题——如果某个话题需要更多探索，拆分为多个问题
 - 聚焦于理解：目的、约束、成功标准
 
+**生成 BDD 场景：**
+
+- 基于澄清性问题获得的共识，用 Gherkin 语法草拟行为场景
+- 使用 `Feature` / `Scenario` / `Given` / `When` / `Then` 标准结构
+- 场景应覆盖核心用户行为和关键边界条件，不求穷举
+- 先在对话中展示场景内容，请用户确认
+- 如果用户要求修改，迭代调整后重新确认
+- 用户确认后，保存为 `docs/specs/features/<主题>.feature` 文件
+- BDD 场景是后续设计和实现的验收依据
+
 **探索方案：**
 
 - 提出 2-3 种不同方案及其权衡
@@ -91,7 +101,7 @@ digraph brainstorming {
 - 一旦你认为理解了要构建什么，就展示设计
 - 每部分篇幅与其复杂度匹配：如果简单直接就几句话，如果有细微差别则最多 200-300 词
 - 每部分完成后询问是否正确
-- 覆盖：**行为规格（BDD Scenarios）**、架构、组件、数据流、错误处理、测试
+- 覆盖：架构、组件、数据流、错误处理、测试
 - 如果有不清楚的地方，准备好回头澄清
 
 **为隔离性和清晰性而设计：**
@@ -111,8 +121,7 @@ digraph brainstorming {
 
 **文档：**
 
-- 行为规格写入 `docs/specs/YYYY-MM-DD-<topic>.feature`
-- 技术方案写入 `docs/specs/YYYY-MM-DD-<topic>-design.md`
+- 将验证后的设计（规格）写入 `docs/specs/YYYY-MM-DD-<主题>-design.md`
   - （用户对规格位置的偏好优先于此默认值）
 - 如果可用，使用 elements-of-style:writing-clearly-and-concisely 技能
 - 将设计文档提交到 git
@@ -129,7 +138,7 @@ digraph brainstorming {
 就地修复任何问题。无需重新审阅——修复后继续。
 
 **对抗性审查：**
-派遣独立子agent，使用 `sp-adversarial-review` 作为角色指令。提供：行为规格（.feature）+ 技术方案（-design.md）。
+派遣独立子agent，使用 `sp-adversarial-review` 作为角色指令。提供：设计文档（-design.md）+ BDD 场景（.feature）。
 
 循环规则：
 - 有严重问题 → 修正后重新提交审查
@@ -157,41 +166,3 @@ digraph brainstorming {
 - **增量验证** — 展示设计，获得批准后再继续
 - **保持灵活** — 当有不清楚的地方时回头澄清
 
-## 行为规格（`.feature` 文件）
-
-```gherkin
-Feature: [功能名称]
-  [一句话描述功能目的]
-
-  Background:
-    Given [所有场景共享的前置条件]
-
-  Scenario: [正常路径 - 场景名]
-    Given [前置条件/上下文]
-    And [额外条件]
-    When [触发动作]
-    Then [预期结果]
-    And [额外断言]
-
-  Scenario: [异常路径 - 场景名]
-    Given [前置条件/上下文]
-    When [触发错误动作]
-    Then [预期错误处理]
-
-  Scenario Outline: [参数化场景名]
-    Given [前置条件]
-    When [动作 with <param>]
-    Then [预期结果 <expected>]
-
-    Examples:
-      | param   | expected        |
-      | value1  | result1         |
-      | value2  | result2         |
-      | 边界值  | 边界结果        |
-```
-
-**规格要求：**
-- 每个 Feature 至少 1 个正常路径 + 1 个异常路径 Scenario
-- 有多组输入/输出时使用 Scenario Outline + Examples
-- Scenario 用业务语言描述，不涉及实现细节
-- 每个 Then 必须可验证（可转化为 assert
