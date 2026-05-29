@@ -219,7 +219,7 @@ type SessionEvent =
 - 主 agent 在 tool 定义中暴露一个内置 tool `spawn_agent`
 - LLM 调用 `spawn_agent(agent_name, task)` 时：
   1. 根据 agent_name 从 Registry 加载 agent 定义
-  2. 创建临时会话（不持久化，或持久化为子会话）
+  2. 创建内存中的临时会话（不持久化到磁盘，随父请求完成后释放）
   3. 运行独立的 Agent Loop 直到完成
   4. 将最终结果作为 tool_result 返回给父 agent
 - 子 agent 默认继承父 agent 的 tool 列表，除非 agent 定义中有 `tools_override`
