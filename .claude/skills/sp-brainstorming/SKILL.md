@@ -26,7 +26,7 @@ description: 需求→行为规格（BDD Feature + Given-When-Then）+ 技术方
 3. **生成 BDD 场景** — 基于澄清结果，用 Gherkin 草拟行为场景，展示给用户确认后保存为 `.feature` 文件
 4. **提出 2-3 种方案** — 包含权衡分析和你的推荐
 5. **展示设计** — 按各部分复杂度缩放篇幅，每部分完成后获取用户批准
-6. **撰写设计文档** — 保存到 `docs/specs/YYYY-MM-DD-<主题>-design.md` 并提交
+6. **撰写设计文档** — 保存到 `docs/specs/YYYY-MM-DD-<topic>-design.md` 并提交
 7. **规格自审** — 快速检查占位符、矛盾、歧义、范围（见下方）
 8. **对抗性审查** — 派遣子agent独立审查，循环直到无严重问题
 9. **用户审阅已写规格** — 请用户在继续之前审阅规格文件
@@ -87,7 +87,7 @@ digraph brainstorming {
 - 场景应覆盖核心用户行为和关键边界条件，不求穷举
 - 先在对话中展示场景内容，请用户确认
 - 如果用户要求修改，迭代调整后重新确认
-- 用户确认后，保存为 `docs/specs/features/<主题>.feature` 文件
+- 用户确认后，保存为 `docs/specs/YYYY-MM-DD-<topic>.feature` 文件
 - BDD 场景是后续设计和实现的验收依据
 
 **探索方案：**
@@ -121,7 +121,7 @@ digraph brainstorming {
 
 **文档：**
 
-- 将验证后的设计（规格）写入 `docs/specs/YYYY-MM-DD-<主题>-design.md`
+- 将验证后的设计（规格）写入 `docs/specs/YYYY-MM-DD-<topic>-design.md`
   - （用户对规格位置的偏好优先于此默认值）
 - 如果可用，使用 elements-of-style:writing-clearly-and-concisely 技能
 - 将设计文档提交到 git
