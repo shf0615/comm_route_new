@@ -94,7 +94,7 @@ Feature: Agent CLI 核心功能
 
   Scenario: 切换 LLM provider
     Given 配置中定义了 "anthropic" 和 "openai" 两个 provider
-    When agent 定义中指定 model="gpt-4o"
+    When agent 定义中指定 provider="openai" model="gpt-4o"
     Then CLI 使用 OpenAI provider 发送请求
 
   Scenario: Provider 级别配置

@@ -33,7 +33,7 @@
               (多provider)   (外部进程)     (同步嵌套)
 ```
 
-单进程，通过 session 方法切换活跃会话。
+单进程，通过 session/create 或 session/resume 切换活跃会话。`chat/send` 始终发往当前活跃会话（最后一次 create/resume 指定的会话）。
 
 ---
 
@@ -52,7 +52,7 @@
 | `session/rollback` | 回退到指定 turn_index |
 | `session/fork` | 从指定 turn_index 分叉新会话 |
 | `session/interrupt` | 打断当前 LLM 调用 |
-| `chat/send` | 发送用户消息 |
+| `chat/send` | 发送用户消息，发往当前活跃会话 |
 
 ### 2.2 通知（server → client）
 
@@ -98,7 +98,6 @@
   },
   "executor": {
     "command": "./scripts/search.sh",
-    "args": ["--query", "{{query}}"],
     "timeout_ms": 30000
   }
 }
@@ -137,11 +136,12 @@
 ```
 
 - Agent = skill 引用 + 模型配置
+- `provider` 字段必须显式指定，不做 model 名推断
 - 可用作主 agent 或子 agent
 
 ### 3.4 注册方式
 
-- 启动时从配置目录自动加载（`./agents/`, `./tools/`, `./skills/`）
+- 启动时从配置目录自动加载（`./config/agents/`, `./config/tools/`, `./config/skills/`）
 - 运行时通过 JSON-RPC 方法动态注册
 
 ---
@@ -160,17 +160,17 @@ type SessionEvent =
   | { type: "assistant_message"; content: string; turn_index: number }
   | { type: "tool_call"; name: string; input: object; call_id: string; turn_index: number }
   | { type: "tool_result"; call_id: string; output: string; turn_index: number }
-  | { type: "sub_agent_call"; agent: string; input: string; turn_index: number }
-  | { type: "sub_agent_result"; output: string; turn_index: number }
+  | { type: "sub_agent_call"; agent: string; input: string; call_id: string; turn_index: number }
+  | { type: "sub_agent_result"; call_id: string; output: string; turn_index: number }
 ```
 
 ### 4.2 操作实现
 
 - **创建：** 生成 session_id，写入 `session_created` 事件
 - **恢复：** 读取 JSONL 文件，重放事件重建消息数组
-- **打断：** 中止当前 LLM 请求（AbortController），记录已生成部分
-- **回退：** 截断 JSONL 文件到指定 turn_index 对应的最后一个事件
-- **Fork：** 复制前 N 个事件到新 JSONL 文件，分配新 session_id
+- **打断：** 中止当前 LLM 请求（AbortController）。原始 `chat/send` 返回 error（code 1005），附带已生成的部分内容（`partial_content` 字段）。`chat/done` 不再发出。
+- **回退：** 截断 JSONL 文件到指定 turn_index 对应的最后一个事件，更新 index.json 的 last_turn
+- **Fork：** 复制前 N 个事件到新 JSONL 文件，分配新 session_id，向 index.json 添加新记录
 
 ### 4.3 元数据索引
 
