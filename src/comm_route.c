@@ -34,6 +34,7 @@ typedef struct {
 typedef struct {
     uint8_t src;
     uint8_t seq;
+    uint8_t valid;
 } cr_dedup_entry_t;
 
 typedef struct {
@@ -446,7 +447,9 @@ void cr_feed_frame(cr_instance_t *inst, const uint8_t *data, uint16_t len) {
 
         /* Dedup check */
         for (uint8_t i = 0; i < self->cfg.dedup_table_size; i++) {
-            if (self->dedup_table[i].src == src && self->dedup_table[i].seq == seq) {
+            if (self->dedup_table[i].valid &&
+                self->dedup_table[i].src == src &&
+                self->dedup_table[i].seq == seq) {
                 return; /* duplicate, drop */
             }
         }
@@ -454,6 +457,7 @@ void cr_feed_frame(cr_instance_t *inst, const uint8_t *data, uint16_t len) {
         /* Record in dedup table (ring overwrite) */
         self->dedup_table[self->dedup_write_idx].src = src;
         self->dedup_table[self->dedup_write_idx].seq = seq;
+        self->dedup_table[self->dedup_write_idx].valid = 1;
         self->dedup_write_idx = (self->dedup_write_idx + 1) % self->cfg.dedup_table_size;
 
         /* Deliver to user */
