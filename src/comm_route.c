@@ -1,12 +1,26 @@
 #include "comm_route.h"
 #include <string.h>
+#include <stdint.h>
 
 /* ===== 帧头大小 ===== */
 #define CR_FRAME_HEADER_SIZE 5
 
+/* Alignment for internal structs (conservative: 4 bytes for uint32_t on ARM) */
+#define CR_ALIGN  4
+
 /* ===== 常量定义 ===== */
 #define CR_BROADCAST_ADDR    0xFF
 #define CR_CTL_ACK_BIT       0x80
+#define CR_CTL_BROADCAST_BIT 0x40
+#define CR_CTL_FRAG_BIT      0x20
+#define CR_CTL_LAST_BIT      0x10
+
+/* CTL bit-field extraction macros */
+#define CR_CTL_IS_ACK(ctl)       (((ctl) & CR_CTL_ACK_BIT) != 0)
+#define CR_CTL_IS_BROADCAST(ctl) (((ctl) & CR_CTL_BROADCAST_BIT) != 0)
+#define CR_CTL_IS_FRAG(ctl)      (((ctl) & CR_CTL_FRAG_BIT) != 0)
+#define CR_CTL_IS_LAST(ctl)      (((ctl) & CR_CTL_LAST_BIT) != 0)
+#define CR_CTL_BIZ_ID(ctl)       ((ctl) & 0x0F)
 
 /* 错误码 */
 #define CR_ERR_QUEUE_FULL    (-1)
@@ -90,19 +104,36 @@ typedef struct {
 /* ===== 实现 ===== */
 
 size_t cr_calc_buffer_size(const cr_config_t *cfg) {
+    if (cfg == NULL) {
+        return 0;
+    }
     size_t size = sizeof(cr_internal_t);
     size += sizeof(cr_tx_task_t) * cfg->tx_queue_depth;
     size += sizeof(cr_rx_slot_t) * cfg->rx_assem_count;
     size += (size_t)cfg->rx_buf_per_slot * cfg->rx_assem_count;
     size += sizeof(cr_dedup_entry_t) * cfg->dedup_table_size;
+    /* Reserve extra bytes for worst-case alignment adjustment */
+    size += CR_ALIGN - 1;
     return size;
 }
 
 int cr_init(cr_instance_t *inst, const cr_config_t *cfg,
             uint8_t *buffer, size_t buffer_size) {
+    if (inst == NULL || cfg == NULL || buffer == NULL) {
+        return CR_ERR_PARAM;
+    }
+
     size_t required = cr_calc_buffer_size(cfg);
     if (buffer_size < required) {
         return CR_ERR_BUFFER;
+    }
+
+    /* Align buffer to CR_ALIGN boundary to avoid unaligned access on ARM */
+    uintptr_t misalign = (uintptr_t)buffer % CR_ALIGN;
+    if (misalign != 0) {
+        size_t pad = CR_ALIGN - misalign;
+        buffer += pad;
+        buffer_size -= pad;
     }
 
     uint8_t *ptr = buffer;
@@ -140,11 +171,17 @@ int cr_init(cr_instance_t *inst, const cr_config_t *cfg,
 }
 
 void cr_set_hal(cr_instance_t *inst, const cr_hal_t *hal) {
+    if (inst == NULL) {
+        return;
+    }
     cr_internal_t *self = CR_GET_INTERNAL(inst);
     self->hal = hal;
 }
 
 void cr_set_recv_callback(cr_instance_t *inst, cr_on_recv_t cb, void *user_ctx) {
+    if (inst == NULL) {
+        return;
+    }
     cr_internal_t *self = CR_GET_INTERNAL(inst);
     self->recv_cb = cb;
     self->recv_ctx = user_ctx;
@@ -235,7 +272,10 @@ static void cr_send_frame(cr_internal_t *self, cr_tx_task_t *task, uint8_t next_
     frame[0] = task->dest;                     /* DST */
     frame[1] = self->cfg.local_addr;           /* SRC */
     /* CTL: bit7=ACK(0), bit6=broadcast, bit5=frag, bit4=last, bit3-0=biz_id */
-    frame[2] = (uint8_t)((is_broadcast << 6) | (is_multi << 5) | (is_last << 4) | (task->biz_id & 0x0F));
+    frame[2] = (uint8_t)((is_broadcast ? CR_CTL_BROADCAST_BIT : 0) |
+                          (is_multi ? CR_CTL_FRAG_BIT : 0) |
+                          (is_last ? CR_CTL_LAST_BIT : 0) |
+                          (task->biz_id & 0x0F));
     frame[3] = task->seq;                      /* SEQ */
     frame[4] = self->cfg.default_ttl;          /* TTL */
 
@@ -349,11 +389,11 @@ static void cr_handle_local_frame(cr_internal_t *self, cr_instance_t *inst,
                                   const uint8_t *data, uint16_t len) {
     uint8_t src = data[1];
     uint8_t ctl = data[2];
-    uint8_t biz_id = ctl & 0x0F;
+    uint8_t biz_id = CR_CTL_BIZ_ID(ctl);
     const uint8_t *payload = &data[CR_FRAME_HEADER_SIZE];
     uint16_t payload_len = len - CR_FRAME_HEADER_SIZE;
 
-    uint8_t is_ack = (ctl & CR_CTL_ACK_BIT) ? 1 : 0;
+    uint8_t is_ack = CR_CTL_IS_ACK(ctl) ? 1 : 0;
     if (is_ack) {
         /* Match active unicast task by SEQ */
         uint8_t seq = data[3];
@@ -377,8 +417,8 @@ static void cr_handle_local_frame(cr_internal_t *self, cr_instance_t *inst,
     }
 
     /* Data frame for us — deliver to user */
-    uint8_t is_frag = (ctl >> 5) & 1;
-    uint8_t is_last = (ctl >> 4) & 1;
+    uint8_t is_frag = CR_CTL_IS_FRAG(ctl) ? 1 : 0;
+    uint8_t is_last = CR_CTL_IS_LAST(ctl) ? 1 : 0;
     uint8_t seq = data[3];
 
     if (!is_frag) {
@@ -471,7 +511,7 @@ static void cr_handle_broadcast_frame(cr_internal_t *self, cr_instance_t *inst,
                                       const uint8_t *data, uint16_t len) {
     uint8_t src = data[1];
     uint8_t ctl = data[2];
-    uint8_t biz_id = ctl & 0x0F;
+    uint8_t biz_id = CR_CTL_BIZ_ID(ctl);
     const uint8_t *payload = &data[CR_FRAME_HEADER_SIZE];
     uint16_t payload_len = len - CR_FRAME_HEADER_SIZE;
     uint8_t seq = data[3];
