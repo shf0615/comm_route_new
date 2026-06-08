@@ -225,3 +225,36 @@ void test_ack_interrupt_mode(void) {
     TEST_ASSERT_EQUAL_INT(1, complete_called);
     TEST_ASSERT_EQUAL_UINT8(0, complete_status);
 }
+
+void test_long_data_complete_with_ack(void) {
+    uint8_t buffer[1024];
+    cr_config_t cfg = {
+        .local_addr = 0x01, .mtu = 8, .frame_interval_ms = 0,
+        .ack_enabled = 1, .ack_mode = CR_ACK_MODE_REPLY,
+        .ack_timeout_ms = 100, .max_retries = 3,
+        .default_ttl = 3, .tx_queue_depth = 4,
+        .rx_assem_count = 2, .dedup_table_size = 16,
+        .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
+        .route_table = NULL, .route_count = 0,
+    };
+    cr_instance_t inst;
+    cr_init(&inst, &cfg, buffer, sizeof(buffer));
+    cr_hal_t hal = { .send = mock_send, .get_tick_ms = mock_get_tick, .hw_ctx = NULL };
+    cr_set_hal(&inst, &hal);
+
+    complete_called = 0;
+    mock_tick = 0;
+    uint8_t data[20] = {0};
+    cr_send(&inst, 0x03, 0, data, 20, mock_on_complete, NULL);
+
+    /* 3 帧，每帧发送后收到ACK */
+    for (int i = 0; i < 3; i++) {
+        cr_poll(&inst); /* 发送帧i */
+        /* 构造 ACK */
+        uint8_t ack[] = {0x01, 0x03, 0x80, sent_buf[3], 0x03};
+        cr_feed_frame(&inst, ack, sizeof(ack));
+    }
+
+    TEST_ASSERT_EQUAL_INT(1, complete_called);
+    TEST_ASSERT_EQUAL_UINT8(0, complete_status);
+}

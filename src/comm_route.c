@@ -14,6 +14,7 @@ typedef struct {
     uint8_t        dest;
     uint8_t        biz_id;
     uint8_t        seq;
+    uint8_t        ack_seq;       /* SEQ of last sent frame (for ACK matching) */
     uint8_t        retries;
     uint8_t        state;
     uint32_t       last_tick;
@@ -218,6 +219,7 @@ static void cr_send_frame(cr_internal_t *self, cr_tx_task_t *task) {
 
     self->hal->send(self->hal->hw_ctx, frame, CR_FRAME_HEADER_SIZE + payload_len);
 
+    task->ack_seq = task->seq;  /* record SEQ for ACK matching */
     task->frame_offset = task->offset;  /* record for retransmit */
     task->offset += payload_len;
     task->last_tick = self->hal->get_tick_ms();
@@ -340,7 +342,7 @@ void cr_feed_frame(cr_instance_t *inst, const uint8_t *data, uint16_t len) {
             uint8_t seq = data[3];
             if (self->active_unicast != NULL &&
                 self->active_unicast->state == TX_STATE_WAIT_ACK &&
-                self->active_unicast->seq == seq) {
+                self->active_unicast->ack_seq == seq) {
                 /* ACK confirmed — check if more frames to send */
                 cr_tx_task_t *task = self->active_unicast;
                 if (task->offset >= task->total_len) {
