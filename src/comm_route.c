@@ -4,6 +4,14 @@
 /* ===== 帧头大小 ===== */
 #define CR_FRAME_HEADER_SIZE 5
 
+/* ===== 常量定义 ===== */
+#define CR_BROADCAST_ADDR    0xFF
+
+/* 错误码 */
+#define CR_ERR_QUEUE_FULL    (-1)
+#define CR_ERR_PARAM         (-2)
+#define CR_ERR_BUFFER        (-3)
+
 /* ===== 内部结构定义 ===== */
 
 typedef struct {
@@ -58,12 +66,16 @@ typedef struct {
     /* RX assembly */
     cr_rx_slot_t       *rx_slots;
     uint8_t            *rx_buffers;
+    uint8_t             rx_active_count;
     /* Broadcast dedup */
     cr_dedup_entry_t   *dedup_table;
     uint8_t             dedup_write_idx;
     /* Sequence counter */
     uint8_t             seq_counter;
-    /* Interrupt ACK flag */
+    /* Interrupt ACK flag
+     * Design assumption: single-core, ISR sets flag (cr_notify_send_done),
+     * main loop reads and clears. No lock needed — volatile ensures visibility.
+     * NOT safe for multi-core without memory barrier. */
     volatile uint8_t    send_done_flag;
 } cr_internal_t;
 
@@ -85,7 +97,7 @@ int cr_init(cr_instance_t *inst, const cr_config_t *cfg,
             uint8_t *buffer, size_t buffer_size) {
     size_t required = cr_calc_buffer_size(cfg);
     if (buffer_size < required) {
-        return -3;
+        return CR_ERR_BUFFER;
     }
 
     uint8_t *ptr = buffer;
@@ -144,7 +156,7 @@ static uint8_t cr_route_lookup(cr_internal_t *self, uint8_t dest) {
             return self->cfg.route_table[i].next_hop;
         }
     }
-    return 0xFF; /* not found — use 0xFF as sentinel (broadcast addr never a valid next_hop) */
+    return CR_BROADCAST_ADDR; /* not found — broadcast addr as sentinel (never a valid next_hop) */
 }
 
 int cr_send(cr_instance_t *inst, uint8_t dest, uint8_t biz_id,
@@ -153,7 +165,7 @@ int cr_send(cr_instance_t *inst, uint8_t dest, uint8_t biz_id,
     cr_internal_t *self = CR_GET_INTERNAL(inst);
 
     if (self->tx_count >= self->cfg.tx_queue_depth) {
-        return -1;
+        return CR_ERR_QUEUE_FULL;
     }
 
     cr_tx_task_t *task = &self->tx_queue[self->tx_tail];
@@ -181,13 +193,13 @@ int cr_broadcast(cr_instance_t *inst, uint8_t biz_id,
     cr_internal_t *self = CR_GET_INTERNAL(inst);
 
     if (len > self->cfg.mtu) {
-        return -2;
+        return CR_ERR_PARAM;
     }
 
     self->bcast_task.data = data;
     self->bcast_task.total_len = len;
     self->bcast_task.offset = 0;
-    self->bcast_task.dest = 0xFF;
+    self->bcast_task.dest = CR_BROADCAST_ADDR;
     self->bcast_task.biz_id = biz_id & 0x0F;
     self->bcast_task.seq = self->seq_counter++;
     self->bcast_task.state = TX_STATE_SENDING;
@@ -198,7 +210,7 @@ int cr_broadcast(cr_instance_t *inst, uint8_t biz_id,
 
 static void cr_send_frame(cr_internal_t *self, cr_tx_task_t *task, uint8_t next_hop) {
     uint16_t payload_len = task->total_len - task->offset;
-    uint8_t is_broadcast = (task->dest == 0xFF) ? 1 : 0;
+    uint8_t is_broadcast = (task->dest == CR_BROADCAST_ADDR) ? 1 : 0;
     uint8_t is_multi = (task->total_len > self->cfg.mtu) ? 1 : 0;
     uint8_t is_last = 0;
 
@@ -210,7 +222,7 @@ static void cr_send_frame(cr_internal_t *self, cr_tx_task_t *task, uint8_t next_
         }
     }
 
-    uint8_t frame[CR_FRAME_HEADER_SIZE + 256]; /* max frame */
+    uint8_t frame[CR_FRAME_HEADER_SIZE + self->cfg.mtu]; /* sized to actual MTU */
     frame[0] = task->dest;                     /* DST */
     frame[1] = self->cfg.local_addr;           /* SRC */
     /* CTL: bit7=ACK(0), bit6=broadcast, bit5=frag, bit4=last, bit3-0=biz_id */
@@ -235,20 +247,21 @@ static void cr_send_frame(cr_internal_t *self, cr_tx_task_t *task, uint8_t next_
 void cr_poll(cr_instance_t *inst) {
     cr_internal_t *self = CR_GET_INTERNAL(inst);
 
-    /* Check RX assembly timeouts */
-    if (self->cfg.rx_assem_timeout_ms > 0) {
+    /* Check RX assembly timeouts (skip if no active slots) */
+    if (self->rx_active_count > 0 && self->cfg.rx_assem_timeout_ms > 0) {
         uint32_t now = self->hal->get_tick_ms();
         for (uint8_t i = 0; i < self->cfg.rx_assem_count; i++) {
             if (self->rx_slots[i].active &&
                 (now - self->rx_slots[i].last_active_tick) >= self->cfg.rx_assem_timeout_ms) {
                 self->rx_slots[i].active = 0;
+                self->rx_active_count--;
             }
         }
     }
 
     /* Process broadcast slot (independent of unicast) */
     if (self->bcast_pending) {
-        cr_send_frame(self, &self->bcast_task, 0xFF);
+        cr_send_frame(self, &self->bcast_task, CR_BROADCAST_ADDR);
         self->bcast_pending = 0;
     }
 
@@ -395,6 +408,7 @@ void cr_feed_frame(cr_instance_t *inst, const uint8_t *data, uint16_t len) {
                         slot = &self->rx_slots[i];
                         slot_idx = i;
                         slot->active = 1;
+                        self->rx_active_count++;
                         slot->src = src;
                         slot->biz_id = biz_id;
                         slot->expected_seq = 0;
@@ -413,8 +427,14 @@ void cr_feed_frame(cr_instance_t *inst, const uint8_t *data, uint16_t len) {
             if (seq < slot->expected_seq) {
                 /* Duplicate — still ACK but don't write */
             } else if (seq == slot->expected_seq) {
-                /* Write payload to assembly buffer */
+                /* Write payload to assembly buffer with bounds check */
                 uint8_t *rx_buf = self->rx_buffers + (size_t)slot_idx * self->cfg.rx_buf_per_slot;
+                if (slot->received_len + payload_len > self->cfg.rx_buf_per_slot) {
+                    /* Buffer overflow — discard this assembly */
+                    slot->active = 0;
+                    self->rx_active_count--;
+                    return;
+                }
                 memcpy(rx_buf + slot->received_len, payload, payload_len);
                 slot->received_len += payload_len;
                 slot->expected_seq++;
@@ -426,6 +446,7 @@ void cr_feed_frame(cr_instance_t *inst, const uint8_t *data, uint16_t len) {
                         self->recv_cb(inst, src, biz_id, rx_buf, slot->received_len, self->recv_ctx);
                     }
                     slot->active = 0;
+                    self->rx_active_count--;
                 }
             }
             /* else: out of order — drop (simple sequential protocol) */
@@ -443,7 +464,7 @@ void cr_feed_frame(cr_instance_t *inst, const uint8_t *data, uint16_t len) {
             ack_frame[4] = self->cfg.default_ttl;  /* TTL */
             self->hal->send(self->hal->hw_ctx, ack_next, ack_frame, CR_FRAME_HEADER_SIZE);
         }
-    } else if (dst == 0xFF) {
+    } else if (dst == CR_BROADCAST_ADDR) {
         /* Broadcast frame */
         uint8_t seq = data[3];
         uint8_t ttl = data[4];
@@ -470,15 +491,18 @@ void cr_feed_frame(cr_instance_t *inst, const uint8_t *data, uint16_t len) {
 
         /* Forward with TTL-1 if TTL > 0 */
         if (ttl > 0) {
-            uint8_t fwd_frame[CR_FRAME_HEADER_SIZE + 256];
-            memcpy(fwd_frame, data, len);
-            fwd_frame[4] = ttl - 1;
-            self->hal->send(self->hal->hw_ctx, 0xFF, fwd_frame, len);
+            uint8_t fwd_frame[CR_FRAME_HEADER_SIZE + self->cfg.mtu]; /* sized to actual MTU */
+            if (len <= sizeof(fwd_frame)) {
+                memcpy(fwd_frame, data, len);
+                fwd_frame[4] = ttl - 1;
+                self->hal->send(self->hal->hw_ctx, CR_BROADCAST_ADDR, fwd_frame, len);
+            }
+            /* else: oversized frame, drop silently */
         }
     } else {
         /* Not for us — route and forward */
         uint8_t next_hop = cr_route_lookup(self, dst);
-        if (next_hop != 0xFF) {
+        if (next_hop != CR_BROADCAST_ADDR) {
             self->hal->send(self->hal->hw_ctx, next_hop, data, len);
         }
         /* else: no route, drop */
