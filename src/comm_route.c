@@ -10,6 +10,7 @@ typedef struct {
     const uint8_t *data;
     uint16_t       total_len;
     uint16_t       offset;
+    uint16_t       frame_offset;  /* offset before last send (for retransmit) */
     uint8_t        dest;
     uint8_t        biz_id;
     uint8_t        seq;
@@ -215,6 +216,7 @@ static void cr_send_frame(cr_internal_t *self, cr_tx_task_t *task) {
 
     self->hal->send(self->hal->hw_ctx, frame, CR_FRAME_HEADER_SIZE + payload_len);
 
+    task->frame_offset = task->offset;  /* record for retransmit */
     task->offset += payload_len;
     task->last_tick = self->hal->get_tick_ms();
 
@@ -263,6 +265,24 @@ void cr_poll(cr_instance_t *inst) {
             } else {
                 task->state = TX_STATE_WAIT_ACK;
             }
+        } else if (task->state == TX_STATE_WAIT_ACK) {
+            uint32_t now = self->hal->get_tick_ms();
+            if ((now - task->last_tick) >= self->cfg.ack_timeout_ms) {
+                if (task->retries >= self->cfg.max_retries) {
+                    /* Failed */
+                    if (task->on_complete) {
+                        task->on_complete(1, task->user_ctx);
+                    }
+                    self->active_unicast = NULL;
+                } else {
+                    /* Retransmit: rewind offset to before last send */
+                    task->retries++;
+                    task->offset = task->frame_offset;
+                    task->state = TX_STATE_SENDING;
+                    cr_send_frame(self, task);
+                    task->state = TX_STATE_WAIT_ACK;
+                }
+            }
         }
     }
 }
@@ -288,7 +308,24 @@ void cr_feed_frame(cr_instance_t *inst, const uint8_t *data, uint16_t len) {
         /* Addressed to us */
         uint8_t is_ack = (ctl >> 7) & 1;
         if (is_ack) {
-            /* TODO: match active task SEQ */
+            /* Match active unicast task by SEQ */
+            uint8_t seq = data[3];
+            if (self->active_unicast != NULL &&
+                self->active_unicast->state == TX_STATE_WAIT_ACK &&
+                self->active_unicast->seq == seq) {
+                /* ACK confirmed — check if more frames to send */
+                cr_tx_task_t *task = self->active_unicast;
+                if (task->offset >= task->total_len) {
+                    /* All done */
+                    if (task->on_complete) {
+                        task->on_complete(0, task->user_ctx);
+                    }
+                    self->active_unicast = NULL;
+                } else {
+                    /* More frames — continue sending */
+                    task->state = TX_STATE_SENDING;
+                }
+            }
             return;
         }
 
