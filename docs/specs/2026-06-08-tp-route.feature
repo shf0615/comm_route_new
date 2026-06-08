@@ -145,7 +145,7 @@ Feature: 接收端长数据组装
 
   Scenario: 正常接收多帧长数据
     Given 实例配置本机地址=0x02
-    When 依次收到来自 0x01 的 3 帧分片（序号 0,1,2，总帧数=3）
+    When 依次收到来自 0x01 的 3 帧分片（序号 0,1,2，第3帧带末帧标记）
     Then 库内部缓存并组装
     And 收齐后触发接收完成回调，将完整数据交给用户
 
@@ -175,3 +175,65 @@ Feature: 拓扑支持
     And 路由表中无到 0x05 的条目
     When B 收到一帧（源=0x01, 目标=0x05）
     Then B 丢弃该帧（无路由，不转发）
+
+# language: zh-CN
+Feature: 多跳 ACK 回传
+  ACK 帧在多跳场景下能正确经中间节点路由回传到原始发送端
+
+  Scenario: 三节点链式拓扑 - ACK 经中间节点回传
+    Given 节点 A 地址=0x01, 路由表：0x03→下一跳0x02
+    And 节点 B 地址=0x02, 路由表：0x01→直连, 0x03→直连
+    And 节点 C 地址=0x03, 路由表：0x01→下一跳0x02
+    When A 通过 B 发送数据帧到 C
+    And C 收到数据帧后自动发送 ACK（DST=0x01, SRC=0x03）
+    Then B 收到该 ACK 帧，DST=0x01≠本机，查路由表转发到 A
+    And A 收到 ACK 帧，DST=0x01==本机，匹配 SEQ 标记成功
+
+  Scenario: 中间节点不消费非自己的 ACK 帧
+    Given 节点 B 地址=0x02
+    And B 有一个活跃发送任务（SEQ=5, 目标=0x04）
+    When B 收到 ACK 帧（DST=0x01, SRC=0x03, SEQ=5）
+    Then B 不匹配该 ACK（DST≠本机），按路由表转发
+
+# language: zh-CN
+Feature: 错误处理
+  API 返回错误码的边界场景
+
+  Scenario: 发送队列满时返回错误
+    Given 实例配置 tx_queue_depth=2
+    And 队列中已有 2 个待发送任务
+    When 用户再次调用 cr_send 提交发送请求
+    Then 返回 -1（队列满）
+
+  Scenario: 广播数据超过 MTU 时返回错误
+    Given 实例配置 MTU=8
+    When 用户调用 cr_broadcast 发送 16 字节数据
+    Then 返回 -2（参数错误，广播仅支持单帧）
+
+  Scenario: Buffer 不足时初始化失败
+    Given 用户提供一块 32 字节的 buffer（小于所需最小值）
+    When 用户调用 cr_init 初始化实例
+    Then 返回 -3（buffer 不足）
+
+# language: zh-CN
+Feature: 接收组装异常处理
+  接收长数据组装的异常和边界场景
+
+  Scenario: 组装超时释放槽位
+    Given 实例配置本机地址=0x02, ACK超时=100ms, 最大重传=3
+    And 正在组装来自 0x01 的长数据（已收到序号 0,1）
+    When 超过组装超时时间仍未收到后续帧
+    Then 释放该 RX 组装槽位
+    And 已缓存的不完整数据被丢弃
+
+  Scenario: 组装槽满时丢弃新长数据首帧
+    Given 实例配置 rx_assem_count=2
+    And 2 个组装槽均被占用（分别组装来自 0x01 和 0x03 的数据）
+    When 收到来自 0x04 的新长数据首帧（序号=0）
+    Then 该帧被丢弃（无可用槽位）
+
+  Scenario: 重复帧不重复写入
+    Given 正在组装来自 0x01 的长数据，已收到序号 0,1
+    When 再次收到来自 0x01 的序号=1 的帧（重传帧）
+    Then 不重复写入组装缓冲区
+    And 仍发送 ACK 确认

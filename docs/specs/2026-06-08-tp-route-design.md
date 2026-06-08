@@ -110,6 +110,7 @@ typedef struct {
     uint8_t                 tx_queue_depth;    // 发送队列深度
     uint8_t                 rx_assem_count;    // 接收组装槽数量
     uint8_t                 dedup_table_size;  // 去重表大小
+    uint16_t                rx_assem_timeout_ms; // RX组装超时（ms）
     const cr_route_entry_t *route_table;       // 路由表指针
     uint8_t                 route_count;       // 路由条目数
 } cr_config_t;
@@ -204,8 +205,12 @@ IDLE → SENDING → WAIT_ACK → 判断
 ```
 cr_feed_frame(inst, data, len)
   │
-  ├─ CTL.bit7 == 1 (ACK帧)?
-  │   └─ 匹配活跃发送任务 SEQ，标记成功
+  ├─ DST == 本机地址?
+  │   ├─ CTL.bit7 == 1 (ACK帧)?
+  │   │   └─ 匹配活跃发送任务 SEQ，标记成功
+  │   ├─ 单帧(CTL.bit5==0) → 触发接收回调 + 发ACK
+  │   └─ 分片(CTL.bit5==1) → 写入RX组装槽 + 发ACK
+  │       └─ 末帧(CTL.bit4==1) → 组装完成，触发回调，释放槽
   │
   ├─ DST == 0xFF (广播)?
   │   ├─ 去重检查（SRC+SEQ 已见?）→ 丢弃
@@ -213,13 +218,11 @@ cr_feed_frame(inst, data, len)
   │   ├─ 触发接收回调
   │   └─ TTL > 0 → TTL-1，转发
   │
-  ├─ DST == 本机地址?
-  │   ├─ 单帧(CTL.bit5==0) → 触发接收回调 + 发ACK
-  │   └─ 分片(CTL.bit5==1) → 写入RX组装槽 + 发ACK
-  │       └─ 末帧(CTL.bit4==1) → 组装完成，触发回调，释放槽
-  │
-  └─ 其他 → 查路由表转发
+  └─ 其他（DST != 本机 && DST != 广播）
+      └─ 查路由表转发（ACK帧、数据帧统一透传）
 ```
+
+> **关键设计点**：ACK 帧不做特殊前置处理。先判断 DST：若是自己则处理（包括 ACK 匹配）；若不是自己则按路由表转发（ACK 帧和数据帧一样透传）。这保证了多跳场景下 ACK 能正确回传到原始发送端。
 
 ### 接收回调
 
@@ -240,7 +243,7 @@ typedef void (*cr_on_recv_t)(
 
 ### RX 组装超时
 
-在 `cr_poll()` 中检查各 RX 组装槽的最后活跃时间。超过 `ack_timeout_ms × (max_retries + 1) × 2` 仍未收齐则判定超时，释放槽位。该超时值保证发送端重传耗尽后接收端才放弃。
+在 `cr_poll()` 中检查各 RX 组装槽的最后活跃时间。超时值为独立配置项 `rx_assem_timeout_ms`，用户应根据网络中发送端的重传参数合理设置（建议 ≥ 发送端的 ack_timeout × (max_retries + 1)）。超时后释放槽位，丢弃不完整数据。
 
 ---
 
@@ -250,6 +253,7 @@ typedef void (*cr_on_recv_t)(
 - 传播方式：多跳转发 + TTL 递减 + 去重
 - 去重表记录（SRC + SEQ），避免重复处理和转发
 - 去重表满时覆盖最旧记录（环形覆写）
+- 去重表大小建议远小于 256（如 16~32），确保 SEQ 回卷前旧记录已被覆盖淘汰
 - TTL=0 的广播帧只处理不转发
 - 广播帧无 ACK（发完即忘）
 
@@ -294,7 +298,7 @@ void cr_notify_send_done(cr_instance_t *inst);
 - `cr_send`：len ≤ MTU 时单帧发送，len > MTU 时自动拆帧
 - `cr_broadcast`：无完成回调（广播无 ACK，发完即忘）
 - `cr_poll`：非阻塞，每次推进状态机一步
-- `cr_feed_frame`：可在中断或主循环中调用
+- `cr_feed_frame`：只能在主循环中调用（非中断上下文）
 
 ---
 
@@ -307,6 +311,10 @@ void cr_notify_send_done(cr_instance_t *inst);
 | 星型 | 中心节点配所有叶子为直连 |
 | 链式 | 每个节点配相邻节点为直连 |
 | 树形 | 父节点配子节点直连，子节点配非直连目标经父节点 |
-| 环形 | 配合 TTL 和去重，防止循环 |
+| 环形 | 用户必须保证路由表无环（单播不递减 TTL）；广播配合 TTL+去重防循环 |
 
 库本身不感知拓扑形状，完全由路由表决定转发行为。
+
+### 单播转发不递减 TTL
+
+单播帧转发时 TTL 字段不修改（透传）。TTL 仅用于广播帧的循环控制。环形拓扑中用户配置路由表时必须确保单播路径无环——静态路由表的正确性由用户负责。
