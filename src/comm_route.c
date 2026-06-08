@@ -2,13 +2,12 @@
 #include <string.h>
 #include <stdint.h>
 
-/* ===== 帧头大小 ===== */
+/* ===== 常量定义 ===== */
 #define CR_FRAME_HEADER_SIZE 5
 
 /* Alignment for internal structs (conservative: 4 bytes for uint32_t on ARM) */
 #define CR_ALIGN  4
 
-/* ===== 常量定义 ===== */
 #define CR_BROADCAST_ADDR    0xFF
 #define CR_CTL_ACK_BIT       0x80
 #define CR_CTL_BROADCAST_BIT 0x40
@@ -30,6 +29,11 @@
 /* Completion status codes passed to on_complete callback */
 #define CR_STATUS_OK         0
 #define CR_STATUS_FAIL       1
+
+/* TX task states */
+#define TX_STATE_IDLE    0
+#define TX_STATE_SENDING 1
+#define TX_STATE_WAIT_ACK 2
 
 /* ===== 内部结构定义 ===== */
 
@@ -107,7 +111,7 @@ typedef struct {
 /* ===== 辅助宏 ===== */
 #define CR_GET_INTERNAL(inst) ((cr_internal_t *)((inst)->_internal))
 
-/* ===== 实现 ===== */
+/* ===== 初始化与配置 ===== */
 
 size_t cr_calc_buffer_size(const cr_config_t *cfg) {
     if (cfg == NULL) {
@@ -225,10 +229,7 @@ void cr_set_recv_callback(cr_instance_t *inst, cr_on_recv_t cb, void *user_ctx) 
     self->recv_ctx = user_ctx;
 }
 
-/* TX task states */
-#define TX_STATE_IDLE    0
-#define TX_STATE_SENDING 1
-#define TX_STATE_WAIT_ACK 2
+/* ===== 路由与发送 ===== */
 
 static uint8_t cr_route_lookup(cr_internal_t *self, uint8_t dest) {
     for (uint8_t i = 0; i < self->cfg.route_count; i++) {
@@ -311,6 +312,16 @@ int cr_broadcast(cr_instance_t *inst, uint8_t biz_id,
     self->bcast_count++;
 
     return 0;
+}
+
+/* ===== TX 状态机 ===== */
+
+static void cr_finish_active_task(cr_internal_t *self, uint8_t status) {
+    cr_tx_task_t *task = self->active_unicast;
+    if (task->on_complete) {
+        task->on_complete(status, task->user_ctx);
+    }
+    self->active_unicast = NULL;
 }
 
 static void cr_send_frame(cr_internal_t *self, cr_tx_task_t *task, uint8_t next_hop) {
@@ -404,10 +415,7 @@ void cr_poll(cr_instance_t *inst) {
             if (!self->cfg.ack_enabled) {
                 /* Check if done */
                 if (task->offset >= task->total_len) {
-                    if (task->on_complete) {
-                        task->on_complete(CR_STATUS_OK, task->user_ctx);
-                    }
-                    self->active_unicast = NULL;
+                    cr_finish_active_task(self, CR_STATUS_OK);
                 }
                 /* else: more frames to send, stay in SENDING */
             } else {
@@ -418,10 +426,7 @@ void cr_poll(cr_instance_t *inst) {
             if (self->cfg.ack_mode == CR_ACK_MODE_INTERRUPT && self->send_done_flag) {
                 self->send_done_flag = 0;
                 if (task->offset >= task->total_len) {
-                    if (task->on_complete) {
-                        task->on_complete(CR_STATUS_OK, task->user_ctx);
-                    }
-                    self->active_unicast = NULL;
+                    cr_finish_active_task(self, CR_STATUS_OK);
                 } else {
                     task->state = TX_STATE_SENDING;
                 }
@@ -435,11 +440,7 @@ void cr_poll(cr_instance_t *inst) {
             uint32_t now = self->hal->get_tick_ms();
             if ((now - task->last_tick) >= self->cfg.ack_timeout_ms) {
                 if (task->retries >= self->cfg.max_retries) {
-                    /* Failed */
-                    if (task->on_complete) {
-                        task->on_complete(CR_STATUS_FAIL, task->user_ctx);
-                    }
-                    self->active_unicast = NULL;
+                    cr_finish_active_task(self, CR_STATUS_FAIL);
                 } else {
                     /* Retransmit: rewind offset to before last send */
                     task->retries++;
@@ -451,6 +452,51 @@ void cr_poll(cr_instance_t *inst) {
             }
         }
     }
+}
+
+/* ===== RX 接收处理 ===== */
+
+/* Find existing RX slot for (src, biz_id) or allocate a new one.
+ * Returns slot pointer and writes index to *out_idx. Returns NULL if no slot available. */
+static cr_rx_slot_t *cr_rx_find_or_alloc_slot(cr_internal_t *self, uint8_t src,
+                                              uint8_t biz_id, uint8_t *out_idx) {
+    /* Search for existing active slot matching src+biz_id */
+    for (uint8_t i = 0; i < self->cfg.rx_assem_count; i++) {
+        if (self->rx_slots[i].active &&
+            self->rx_slots[i].src == src &&
+            self->rx_slots[i].biz_id == biz_id) {
+            *out_idx = i;
+            return &self->rx_slots[i];
+        }
+    }
+    /* Allocate first free slot */
+    for (uint8_t i = 0; i < self->cfg.rx_assem_count; i++) {
+        if (!self->rx_slots[i].active) {
+            cr_rx_slot_t *slot = &self->rx_slots[i];
+            *out_idx = i;
+            slot->active = 1;
+            self->rx_active_count++;
+            slot->src = src;
+            slot->biz_id = biz_id;
+            slot->expected_seq = 0;
+            slot->received_len = 0;
+            slot->last_active_tick = self->hal->get_tick_ms();
+            return slot;
+        }
+    }
+    return NULL;
+}
+
+/* Send an ACK frame back to the original sender */
+static void cr_send_ack(cr_internal_t *self, uint8_t dest, uint8_t seq) {
+    uint8_t next_hop = cr_route_lookup(self, dest);
+    uint8_t ack_frame[CR_FRAME_HEADER_SIZE];
+    ack_frame[0] = dest;                   /* DST = original sender */
+    ack_frame[1] = self->cfg.local_addr;   /* SRC = us */
+    ack_frame[2] = CR_CTL_ACK_BIT;         /* CTL: bit7=1 (ACK) */
+    ack_frame[3] = seq;                    /* SEQ = same as received */
+    ack_frame[4] = self->cfg.default_ttl;  /* TTL */
+    self->hal->send(self->hal->hw_ctx, next_hop, ack_frame, CR_FRAME_HEADER_SIZE);
 }
 
 static void cr_handle_local_frame(cr_internal_t *self, cr_instance_t *inst,
@@ -471,11 +517,7 @@ static void cr_handle_local_frame(cr_internal_t *self, cr_instance_t *inst,
             /* ACK confirmed — check if more frames to send */
             cr_tx_task_t *task = self->active_unicast;
             if (task->offset >= task->total_len) {
-                /* All done */
-                if (task->on_complete) {
-                    task->on_complete(CR_STATUS_OK, task->user_ctx);
-                }
-                self->active_unicast = NULL;
+                cr_finish_active_task(self, CR_STATUS_OK);
             } else {
                 /* More frames — continue sending, reset retries for next frame */
                 task->retries = 0;
@@ -497,37 +539,8 @@ static void cr_handle_local_frame(cr_internal_t *self, cr_instance_t *inst,
         }
     } else {
         /* Multi-frame fragment — find or create RX assembly slot */
-        cr_rx_slot_t *slot = NULL;
         uint8_t slot_idx = 0;
-
-        /* Find existing slot for this src+biz_id */
-        for (uint8_t i = 0; i < self->cfg.rx_assem_count; i++) {
-            if (self->rx_slots[i].active &&
-                self->rx_slots[i].src == src &&
-                self->rx_slots[i].biz_id == biz_id) {
-                slot = &self->rx_slots[i];
-                slot_idx = i;
-                break;
-            }
-        }
-
-        /* If not found, allocate new slot (only if SEQ==0 for first frame) */
-        if (slot == NULL) {
-            for (uint8_t i = 0; i < self->cfg.rx_assem_count; i++) {
-                if (!self->rx_slots[i].active) {
-                    slot = &self->rx_slots[i];
-                    slot_idx = i;
-                    slot->active = 1;
-                    self->rx_active_count++;
-                    slot->src = src;
-                    slot->biz_id = biz_id;
-                    slot->expected_seq = 0;
-                    slot->received_len = 0;
-                    slot->last_active_tick = self->hal->get_tick_ms();
-                    break;
-                }
-            }
-        }
+        cr_rx_slot_t *slot = cr_rx_find_or_alloc_slot(self, src, biz_id, &slot_idx);
 
         if (slot == NULL) {
             return; /* No free slot, drop */
@@ -564,15 +577,7 @@ static void cr_handle_local_frame(cr_internal_t *self, cr_instance_t *inst,
 
     /* Auto-send ACK if enabled and mode is REPLY */
     if (self->cfg.ack_enabled && self->cfg.ack_mode == CR_ACK_MODE_REPLY) {
-        uint8_t seq_val = data[3];
-        uint8_t ack_next = cr_route_lookup(self, src);
-        uint8_t ack_frame[CR_FRAME_HEADER_SIZE];
-        ack_frame[0] = src;                    /* DST = original sender */
-        ack_frame[1] = self->cfg.local_addr;   /* SRC = us */
-        ack_frame[2] = CR_CTL_ACK_BIT;         /* CTL: bit7=1 (ACK) */
-        ack_frame[3] = seq_val;                /* SEQ = same as received */
-        ack_frame[4] = self->cfg.default_ttl;  /* TTL */
-        self->hal->send(self->hal->hw_ctx, ack_next, ack_frame, CR_FRAME_HEADER_SIZE);
+        cr_send_ack(self, src, data[3]);
     }
 }
 
@@ -633,6 +638,8 @@ static void cr_handle_forward_frame(cr_internal_t *self, const uint8_t *data,
     }
     /* else: no route, drop */
 }
+
+/* ===== 帧分发入口 ===== */
 
 void cr_feed_frame(cr_instance_t *inst, const uint8_t *data, uint16_t len) {
     if (inst == NULL || data == NULL) {
