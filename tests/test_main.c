@@ -21,6 +21,7 @@ extern void test_broadcast_dedup(void);
 extern void test_receive_unicast_single_frame(void);
 extern void test_forward_frame_to_next_hop(void);
 extern void test_drop_frame_no_route(void);
+extern void test_receive_multi_frame_assembly(void);
 
 void setUp(void) {}
 void tearDown(void) {}
@@ -47,5 +48,6 @@ int main(void) {
     RUN_TEST(test_receive_unicast_single_frame);
     RUN_TEST(test_forward_frame_to_next_hop);
     RUN_TEST(test_drop_frame_no_route);
+    RUN_TEST(test_receive_multi_frame_assembly);
     return UNITY_END();
 }

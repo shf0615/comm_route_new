@@ -99,3 +99,26 @@ void test_drop_frame_no_route(void) {
     TEST_ASSERT_EQUAL_INT(0, send_count);
     TEST_ASSERT_EQUAL_INT(0, recv_called);
 }
+
+void test_receive_multi_frame_assembly(void) {
+    setup_instance(0x02, NULL, 0);
+
+    /* 帧1: DST=0x02, SRC=0x01, CTL=0x20(分片), SEQ=0, TTL=3, payload 8B */
+    uint8_t f1[] = {0x02, 0x01, 0x20, 0x00, 0x03, 0,1,2,3,4,5,6,7};
+    /* 帧2: CTL=0x20(分片), SEQ=1 */
+    uint8_t f2[] = {0x02, 0x01, 0x20, 0x01, 0x03, 8,9,10,11,12,13,14,15};
+    /* 帧3: CTL=0x30(分片+末帧), SEQ=2, payload 4B */
+    uint8_t f3[] = {0x02, 0x01, 0x30, 0x02, 0x03, 16,17,18,19};
+
+    cr_feed_frame(&inst, f1, sizeof(f1));
+    TEST_ASSERT_EQUAL_INT(0, recv_called);
+    cr_feed_frame(&inst, f2, sizeof(f2));
+    TEST_ASSERT_EQUAL_INT(0, recv_called);
+    cr_feed_frame(&inst, f3, sizeof(f3));
+    TEST_ASSERT_EQUAL_INT(1, recv_called);
+    TEST_ASSERT_EQUAL_UINT16(20, recv_len);
+
+    uint8_t expected[20];
+    for (int i = 0; i < 20; i++) expected[i] = (uint8_t)i;
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(expected, recv_data, 20);
+}

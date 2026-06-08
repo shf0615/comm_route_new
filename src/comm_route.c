@@ -331,20 +331,81 @@ void cr_feed_frame(cr_instance_t *inst, const uint8_t *data, uint16_t len) {
 
         /* Data frame for us — deliver to user */
         uint8_t is_frag = (ctl >> 5) & 1;
-        (void)is_frag; /* will handle in RX assembly later */
+        uint8_t is_last = (ctl >> 4) & 1;
+        uint8_t seq = data[3];
 
-        if (self->recv_cb) {
-            self->recv_cb(inst, src, biz_id, payload, payload_len, self->recv_ctx);
+        if (!is_frag) {
+            /* Single frame — deliver directly */
+            if (self->recv_cb) {
+                self->recv_cb(inst, src, biz_id, payload, payload_len, self->recv_ctx);
+            }
+        } else {
+            /* Multi-frame fragment — find or create RX assembly slot */
+            cr_rx_slot_t *slot = NULL;
+            uint8_t slot_idx = 0;
+
+            /* Find existing slot for this src+biz_id */
+            for (uint8_t i = 0; i < self->cfg.rx_assem_count; i++) {
+                if (self->rx_slots[i].active &&
+                    self->rx_slots[i].src == src &&
+                    self->rx_slots[i].biz_id == biz_id) {
+                    slot = &self->rx_slots[i];
+                    slot_idx = i;
+                    break;
+                }
+            }
+
+            /* If not found, allocate new slot (only if SEQ==0 for first frame) */
+            if (slot == NULL) {
+                for (uint8_t i = 0; i < self->cfg.rx_assem_count; i++) {
+                    if (!self->rx_slots[i].active) {
+                        slot = &self->rx_slots[i];
+                        slot_idx = i;
+                        slot->active = 1;
+                        slot->src = src;
+                        slot->biz_id = biz_id;
+                        slot->expected_seq = 0;
+                        slot->received_len = 0;
+                        slot->last_active_tick = self->hal->get_tick_ms();
+                        break;
+                    }
+                }
+            }
+
+            if (slot == NULL) {
+                return; /* No free slot, drop */
+            }
+
+            /* Check for duplicate (seq < expected) */
+            if (seq < slot->expected_seq) {
+                /* Duplicate — still ACK but don't write */
+            } else if (seq == slot->expected_seq) {
+                /* Write payload to assembly buffer */
+                uint8_t *rx_buf = self->rx_buffers + (size_t)slot_idx * self->cfg.rx_buf_per_slot;
+                memcpy(rx_buf + slot->received_len, payload, payload_len);
+                slot->received_len += payload_len;
+                slot->expected_seq++;
+                slot->last_active_tick = self->hal->get_tick_ms();
+
+                if (is_last) {
+                    /* Assembly complete */
+                    if (self->recv_cb) {
+                        self->recv_cb(inst, src, biz_id, rx_buf, slot->received_len, self->recv_ctx);
+                    }
+                    slot->active = 0;
+                }
+            }
+            /* else: out of order — drop (simple sequential protocol) */
         }
 
         /* Auto-send ACK if enabled and mode is REPLY */
         if (self->cfg.ack_enabled && self->cfg.ack_mode == CR_ACK_MODE_REPLY) {
-            uint8_t seq = data[3];
+            uint8_t seq_val = data[3];
             uint8_t ack_frame[CR_FRAME_HEADER_SIZE];
             ack_frame[0] = src;                    /* DST = original sender */
             ack_frame[1] = self->cfg.local_addr;   /* SRC = us */
             ack_frame[2] = 0x80;                   /* CTL: bit7=1 (ACK) */
-            ack_frame[3] = seq;                    /* SEQ = same as received */
+            ack_frame[3] = seq_val;                /* SEQ = same as received */
             ack_frame[4] = self->cfg.default_ttl;  /* TTL */
             self->hal->send(self->hal->hw_ctx, ack_frame, CR_FRAME_HEADER_SIZE);
         }
