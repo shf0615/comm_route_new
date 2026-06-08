@@ -95,6 +95,8 @@ typedef struct {
     uint8_t             dedup_write_idx;
     /* Sequence counter */
     uint8_t             seq_counter;
+    /* Scratch buffer for frame building (replaces VLA) */
+    uint8_t            *tx_scratch;
     /* Interrupt ACK flag
      * Design assumption: single-core, ISR sets flag (cr_notify_send_done),
      * main loop reads and clears. No lock needed — volatile ensures visibility.
@@ -111,6 +113,10 @@ size_t cr_calc_buffer_size(const cr_config_t *cfg) {
     if (cfg == NULL) {
         return 0;
     }
+    if (cfg->tx_queue_depth == 0 || cfg->bcast_queue_depth == 0 ||
+        cfg->dedup_table_size == 0 || cfg->mtu == 0) {
+        return 0;
+    }
     size_t size = sizeof(cr_internal_t);
     size += sizeof(cr_tx_task_t) * cfg->tx_queue_depth;
     size += (size_t)cfg->tx_buf_per_slot * cfg->tx_queue_depth;   /* TX buffers */
@@ -119,6 +125,7 @@ size_t cr_calc_buffer_size(const cr_config_t *cfg) {
     size += sizeof(cr_rx_slot_t) * cfg->rx_assem_count;
     size += (size_t)cfg->rx_buf_per_slot * cfg->rx_assem_count;
     size += sizeof(cr_dedup_entry_t) * cfg->dedup_table_size;
+    size += CR_FRAME_HEADER_SIZE + (size_t)cfg->mtu;              /* TX scratch buffer */
     /* Reserve extra bytes for worst-case alignment adjustment */
     size += CR_ALIGN - 1;
     return size;
@@ -127,6 +134,13 @@ size_t cr_calc_buffer_size(const cr_config_t *cfg) {
 int cr_init(cr_instance_t *inst, const cr_config_t *cfg,
             uint8_t *buffer, size_t buffer_size) {
     if (inst == NULL || cfg == NULL || buffer == NULL) {
+        return CR_ERR_PARAM;
+    }
+
+    /* Validate config fields used as divisors or array sizes to prevent
+     * division-by-zero and zero-length allocations */
+    if (cfg->tx_queue_depth == 0 || cfg->bcast_queue_depth == 0 ||
+        cfg->dedup_table_size == 0 || cfg->mtu == 0) {
         return CR_ERR_PARAM;
     }
 
@@ -184,6 +198,10 @@ int cr_init(cr_instance_t *inst, const cr_config_t *cfg,
     ptr += sizeof(cr_dedup_entry_t) * cfg->dedup_table_size;
     memset(self->dedup_table, 0, sizeof(cr_dedup_entry_t) * cfg->dedup_table_size);
 
+    /* TX scratch buffer (replaces VLA in cr_send_frame / broadcast forward) */
+    self->tx_scratch = ptr;
+    ptr += CR_FRAME_HEADER_SIZE + (size_t)cfg->mtu;
+
     /* Link instance handle to internal */
     inst->_internal = self;
 
@@ -224,6 +242,9 @@ static uint8_t cr_route_lookup(cr_internal_t *self, uint8_t dest) {
 int cr_send(cr_instance_t *inst, uint8_t dest, uint8_t biz_id,
             const uint8_t *data, uint16_t len,
             void (*on_complete)(uint8_t status, void *ctx), void *user_ctx) {
+    if (inst == NULL || (data == NULL && len > 0)) {
+        return CR_ERR_PARAM;
+    }
     cr_internal_t *self = CR_GET_INTERNAL(inst);
 
     if (self->tx_count >= self->cfg.tx_queue_depth) {
@@ -235,7 +256,9 @@ int cr_send(cr_instance_t *inst, uint8_t dest, uint8_t biz_id,
         return CR_ERR_PARAM;
     }
     uint8_t *tx_buf = self->tx_buffers + (size_t)self->tx_tail * self->cfg.tx_buf_per_slot;
-    memcpy(tx_buf, data, len);
+    if (len > 0) {
+        memcpy(tx_buf, data, len);
+    }
     task->data = tx_buf;
     task->total_len = len;
     task->offset = 0;
@@ -257,6 +280,9 @@ int cr_send(cr_instance_t *inst, uint8_t dest, uint8_t biz_id,
 
 int cr_broadcast(cr_instance_t *inst, uint8_t biz_id,
                  const uint8_t *data, uint16_t len) {
+    if (inst == NULL || (data == NULL && len > 0)) {
+        return CR_ERR_PARAM;
+    }
     cr_internal_t *self = CR_GET_INTERNAL(inst);
 
     if (self->bcast_count >= self->cfg.bcast_queue_depth) {
@@ -269,7 +295,9 @@ int cr_broadcast(cr_instance_t *inst, uint8_t biz_id,
 
     cr_tx_task_t *task = &self->bcast_queue[self->bcast_tail];
     uint8_t *bcast_buf = self->bcast_buffers + (size_t)self->bcast_tail * self->cfg.mtu;
-    memcpy(bcast_buf, data, len);
+    if (len > 0) {
+        memcpy(bcast_buf, data, len);
+    }
 
     task->data = bcast_buf;
     task->total_len = len;
@@ -299,7 +327,7 @@ static void cr_send_frame(cr_internal_t *self, cr_tx_task_t *task, uint8_t next_
         }
     }
 
-    uint8_t frame[CR_FRAME_HEADER_SIZE + self->cfg.mtu]; /* sized to actual MTU */
+    uint8_t *frame = self->tx_scratch;
     frame[0] = task->dest;                     /* DST */
     frame[1] = self->cfg.local_addr;           /* SRC */
     /* CTL: bit7=ACK(0), bit6=broadcast, bit5=frag, bit4=last, bit3-0=biz_id */
@@ -325,6 +353,9 @@ static void cr_send_frame(cr_internal_t *self, cr_tx_task_t *task, uint8_t next_
 }
 
 void cr_poll(cr_instance_t *inst) {
+    if (inst == NULL) {
+        return;
+    }
     cr_internal_t *self = CR_GET_INTERNAL(inst);
 
     if (self->hal == NULL) {
@@ -446,7 +477,8 @@ static void cr_handle_local_frame(cr_internal_t *self, cr_instance_t *inst,
                 }
                 self->active_unicast = NULL;
             } else {
-                /* More frames — continue sending */
+                /* More frames — continue sending, reset retries for next frame */
+                task->retries = 0;
                 task->state = TX_STATE_SENDING;
             }
         }
@@ -547,6 +579,12 @@ static void cr_handle_local_frame(cr_internal_t *self, cr_instance_t *inst,
 static void cr_handle_broadcast_frame(cr_internal_t *self, cr_instance_t *inst,
                                       const uint8_t *data, uint16_t len) {
     uint8_t src = data[1];
+
+    /* Drop our own broadcasts reflected back */
+    if (src == self->cfg.local_addr) {
+        return;
+    }
+
     uint8_t ctl = data[2];
     uint8_t biz_id = CR_CTL_BIZ_ID(ctl);
     const uint8_t *payload = &data[CR_FRAME_HEADER_SIZE];
@@ -576,8 +614,9 @@ static void cr_handle_broadcast_frame(cr_internal_t *self, cr_instance_t *inst,
 
     /* Forward with TTL-1 if TTL > 0 */
     if (ttl > 0) {
-        uint8_t fwd_frame[CR_FRAME_HEADER_SIZE + self->cfg.mtu]; /* sized to actual MTU */
-        if (len <= sizeof(fwd_frame)) {
+        uint16_t max_frame = CR_FRAME_HEADER_SIZE + self->cfg.mtu;
+        if (len <= max_frame) {
+            uint8_t *fwd_frame = self->tx_scratch;
             memcpy(fwd_frame, data, len);
             fwd_frame[4] = ttl - 1;
             self->hal->send(self->hal->hw_ctx, CR_BROADCAST_ADDR, fwd_frame, len);
@@ -596,6 +635,9 @@ static void cr_handle_forward_frame(cr_internal_t *self, const uint8_t *data,
 }
 
 void cr_feed_frame(cr_instance_t *inst, const uint8_t *data, uint16_t len) {
+    if (inst == NULL || data == NULL) {
+        return;
+    }
     cr_internal_t *self = CR_GET_INTERNAL(inst);
 
     if (len < CR_FRAME_HEADER_SIZE) {
@@ -618,6 +660,9 @@ void cr_feed_frame(cr_instance_t *inst, const uint8_t *data, uint16_t len) {
 }
 
 void cr_notify_send_done(cr_instance_t *inst) {
+    if (inst == NULL) {
+        return;
+    }
     cr_internal_t *self = CR_GET_INTERNAL(inst);
     self->send_done_flag = 1;
 }
