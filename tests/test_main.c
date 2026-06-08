@@ -59,6 +59,43 @@ extern void test_broadcast_queue_multiple(void);
 extern void test_broadcast_queue_full(void);
 extern void test_send_exceeds_tx_buf(void);
 
+/* test_coverage.c */
+extern void test_boundary_mtu_one_segmentation(void);
+extern void test_boundary_tx_queue_depth_one(void);
+extern void test_boundary_broadcast_ttl_zero_send(void);
+extern void test_boundary_empty_route_table_send(void);
+extern void test_boundary_rx_buf_exactly_fits(void);
+extern void test_boundary_rx_buf_one_byte_short(void);
+extern void test_error_hal_send_fail(void);
+extern void test_error_feed_frame_null_data(void);
+extern void test_error_feed_frame_null_instance(void);
+extern void test_error_poll_no_hal(void);
+extern void test_error_init_mtu_zero(void);
+extern void test_error_init_tx_queue_depth_zero(void);
+extern void test_error_init_bcast_queue_depth_zero(void);
+extern void test_error_init_dedup_table_size_zero(void);
+extern void test_safety_send_huge_len(void);
+extern void test_safety_broadcast_huge_len(void);
+extern void test_safety_forged_frame_invalid_ctl(void);
+extern void test_safety_forged_unicast_to_broadcast_addr(void);
+extern void test_safety_rx_frame_payload_exceeds_mtu(void);
+extern void test_safety_rx_broadcast_oversized_no_forward(void);
+extern void test_stress_fill_tx_queue(void);
+extern void test_stress_multiple_rx_slots_active(void);
+extern void test_e2e_three_node_chain_long_data(void);
+extern void test_e2e_broadcast_flood_and_dedup(void);
+extern void test_stress_seq_wrap_with_ack(void);
+extern void test_boundary_calc_buffer_size_mtu_zero(void);
+extern void test_boundary_calc_buffer_size_null(void);
+extern void test_error_long_data_ack_fail_whole_task(void);
+extern void test_boundary_biz_id_propagation(void);
+extern void test_safety_send_null_data_nonzero_len(void);
+extern void test_safety_broadcast_null_data_nonzero_len(void);
+extern void test_safety_send_null_instance(void);
+extern void test_safety_broadcast_null_instance(void);
+extern void test_error_poll_null_instance(void);
+extern void test_error_notify_send_done_null(void);
+
 void setUp(void) {}
 void tearDown(void) {}
 
@@ -120,5 +157,41 @@ int main(void) {
     RUN_TEST(test_broadcast_queue_multiple);
     RUN_TEST(test_broadcast_queue_full);
     RUN_TEST(test_send_exceeds_tx_buf);
+    /* test_coverage.c */
+    RUN_TEST(test_boundary_mtu_one_segmentation);
+    RUN_TEST(test_boundary_tx_queue_depth_one);
+    RUN_TEST(test_boundary_broadcast_ttl_zero_send);
+    RUN_TEST(test_boundary_empty_route_table_send);
+    RUN_TEST(test_boundary_rx_buf_exactly_fits);
+    RUN_TEST(test_boundary_rx_buf_one_byte_short);
+    RUN_TEST(test_error_hal_send_fail);
+    RUN_TEST(test_error_feed_frame_null_data);
+    RUN_TEST(test_error_feed_frame_null_instance);
+    RUN_TEST(test_error_poll_no_hal);
+    RUN_TEST(test_error_init_mtu_zero);
+    RUN_TEST(test_error_init_tx_queue_depth_zero);
+    RUN_TEST(test_error_init_bcast_queue_depth_zero);
+    RUN_TEST(test_error_init_dedup_table_size_zero);
+    RUN_TEST(test_safety_send_huge_len);
+    RUN_TEST(test_safety_broadcast_huge_len);
+    RUN_TEST(test_safety_forged_frame_invalid_ctl);
+    RUN_TEST(test_safety_forged_unicast_to_broadcast_addr);
+    RUN_TEST(test_safety_rx_frame_payload_exceeds_mtu);
+    RUN_TEST(test_safety_rx_broadcast_oversized_no_forward);
+    RUN_TEST(test_stress_fill_tx_queue);
+    RUN_TEST(test_stress_multiple_rx_slots_active);
+    RUN_TEST(test_e2e_three_node_chain_long_data);
+    RUN_TEST(test_e2e_broadcast_flood_and_dedup);
+    RUN_TEST(test_stress_seq_wrap_with_ack);
+    RUN_TEST(test_boundary_calc_buffer_size_mtu_zero);
+    RUN_TEST(test_boundary_calc_buffer_size_null);
+    RUN_TEST(test_error_long_data_ack_fail_whole_task);
+    RUN_TEST(test_boundary_biz_id_propagation);
+    RUN_TEST(test_safety_send_null_data_nonzero_len);
+    RUN_TEST(test_safety_broadcast_null_data_nonzero_len);
+    RUN_TEST(test_safety_send_null_instance);
+    RUN_TEST(test_safety_broadcast_null_instance);
+    RUN_TEST(test_error_poll_null_instance);
+    RUN_TEST(test_error_notify_send_done_null);
     return UNITY_END();
 }
