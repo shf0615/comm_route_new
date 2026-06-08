@@ -330,8 +330,23 @@ void cr_feed_frame(cr_instance_t *inst, const uint8_t *data, uint16_t len) {
         }
 
         /* Data frame for us — deliver to user */
+        uint8_t is_frag = (ctl >> 5) & 1;
+        (void)is_frag; /* will handle in RX assembly later */
+
         if (self->recv_cb) {
             self->recv_cb(inst, src, biz_id, payload, payload_len, self->recv_ctx);
+        }
+
+        /* Auto-send ACK if enabled and mode is REPLY */
+        if (self->cfg.ack_enabled && self->cfg.ack_mode == CR_ACK_MODE_REPLY) {
+            uint8_t seq = data[3];
+            uint8_t ack_frame[CR_FRAME_HEADER_SIZE];
+            ack_frame[0] = src;                    /* DST = original sender */
+            ack_frame[1] = self->cfg.local_addr;   /* SRC = us */
+            ack_frame[2] = 0x80;                   /* CTL: bit7=1 (ACK) */
+            ack_frame[3] = seq;                    /* SEQ = same as received */
+            ack_frame[4] = self->cfg.default_ttl;  /* TTL */
+            self->hal->send(self->hal->hw_ctx, ack_frame, CR_FRAME_HEADER_SIZE);
         }
     } else if (dst == 0xFF) {
         /* Broadcast frame */

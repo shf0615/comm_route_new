@@ -12,6 +12,7 @@ extern void test_long_data_complete_callback_ack_off(void);
 extern void test_ack_reply_normal(void);
 extern void test_ack_timeout_retransmit(void);
 extern void test_ack_max_retries_fail(void);
+extern void test_receiver_auto_sends_ack(void);
 extern void test_broadcast_single_frame(void);
 extern void test_broadcast_exceeds_mtu(void);
 extern void test_receive_broadcast_and_forward(void);
@@ -37,6 +38,7 @@ int main(void) {
     RUN_TEST(test_ack_reply_normal);
     RUN_TEST(test_ack_timeout_retransmit);
     RUN_TEST(test_ack_max_retries_fail);
+    RUN_TEST(test_receiver_auto_sends_ack);
     RUN_TEST(test_broadcast_single_frame);
     RUN_TEST(test_broadcast_exceeds_mtu);
     RUN_TEST(test_receive_broadcast_and_forward);
