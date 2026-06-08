@@ -30,6 +30,8 @@ typedef struct {
     uint8_t                 dedup_table_size;
     uint16_t                rx_assem_timeout_ms;
     uint16_t                rx_buf_per_slot;
+    uint16_t                tx_buf_per_slot;    /* 每个TX槽位的最大payload字节数 */
+    uint8_t                 bcast_queue_depth;  /* 广播队列深度 */
     const cr_route_entry_t *route_table;
     uint8_t                 route_count;
 } cr_config_t;

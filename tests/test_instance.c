@@ -4,7 +4,7 @@
 #include <stdlib.h>
 
 void test_create_instance_with_static_buffer(void) {
-    uint8_t buffer[1024];
+    uint8_t buffer[4096];
     cr_config_t cfg = {
         .local_addr = 0x01,
         .mtu = 64,
@@ -19,6 +19,8 @@ void test_create_instance_with_static_buffer(void) {
         .dedup_table_size = 16,
         .rx_assem_timeout_ms = 1000,
         .rx_buf_per_slot = 256,
+        .tx_buf_per_slot = 256,
+        .bcast_queue_depth = 4,
         .route_table = NULL,
         .route_count = 0,
     };
@@ -36,6 +38,8 @@ void test_init_fails_with_insufficient_buffer(void) {
         .rx_assem_count = 2,
         .dedup_table_size = 16,
         .rx_buf_per_slot = 256,
+        .tx_buf_per_slot = 256,
+        .bcast_queue_depth = 4,
     };
     cr_instance_t inst;
     int ret = cr_init(&inst, &cfg, buffer, sizeof(buffer));
@@ -49,7 +53,7 @@ static int dummy_send(void *ctx, uint8_t next_hop, const uint8_t *data, uint16_t
 static uint32_t dummy_tick(void) { return 0; }
 
 void test_multi_instance_isolation(void) {
-    uint8_t buf_a[1024], buf_b[512];
+    uint8_t buf_a[4096], buf_b[2048];
     cr_config_t cfg = {
         .local_addr = 0x01, .mtu = 8, .tx_queue_depth = 2,
         .rx_assem_count = 1, .dedup_table_size = 8,
@@ -57,6 +61,7 @@ void test_multi_instance_isolation(void) {
         .ack_timeout_ms = 100, .ack_enabled = 0,
         .ack_mode = CR_ACK_MODE_REPLY, .default_ttl = 3,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 128,
+        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cr_instance_t inst_a, inst_b;
@@ -87,6 +92,8 @@ void test_calc_buffer_size(void) {
         .mtu = 64, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 16,
         .rx_buf_per_slot = 256,
+        .tx_buf_per_slot = 256,
+        .bcast_queue_depth = 4,
     };
     size_t size = cr_calc_buffer_size(&cfg);
     uint8_t *buf = (uint8_t *)malloc(size);

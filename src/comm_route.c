@@ -79,9 +79,13 @@ typedef struct {
     uint8_t             tx_count;
     /* Active unicast slot */
     cr_tx_task_t       *active_unicast;
-    /* Broadcast slot */
-    cr_tx_task_t        bcast_task;
-    uint8_t             bcast_pending;
+    uint8_t            *tx_buffers;       /* TX deep-copy buffer base */
+    /* Broadcast queue */
+    cr_tx_task_t       *bcast_queue;
+    uint8_t            *bcast_buffers;    /* Broadcast deep-copy buffer base */
+    uint8_t             bcast_head;
+    uint8_t             bcast_tail;
+    uint8_t             bcast_count;
     /* RX assembly */
     cr_rx_slot_t       *rx_slots;
     uint8_t            *rx_buffers;
@@ -109,6 +113,9 @@ size_t cr_calc_buffer_size(const cr_config_t *cfg) {
     }
     size_t size = sizeof(cr_internal_t);
     size += sizeof(cr_tx_task_t) * cfg->tx_queue_depth;
+    size += (size_t)cfg->tx_buf_per_slot * cfg->tx_queue_depth;   /* TX buffers */
+    size += sizeof(cr_tx_task_t) * cfg->bcast_queue_depth;        /* Bcast queue */
+    size += (size_t)cfg->mtu * cfg->bcast_queue_depth;            /* Bcast buffers */
     size += sizeof(cr_rx_slot_t) * cfg->rx_assem_count;
     size += (size_t)cfg->rx_buf_per_slot * cfg->rx_assem_count;
     size += sizeof(cr_dedup_entry_t) * cfg->dedup_table_size;
@@ -149,6 +156,19 @@ int cr_init(cr_instance_t *inst, const cr_config_t *cfg,
     self->tx_queue = (cr_tx_task_t *)ptr;
     ptr += sizeof(cr_tx_task_t) * cfg->tx_queue_depth;
     memset(self->tx_queue, 0, sizeof(cr_tx_task_t) * cfg->tx_queue_depth);
+
+    /* TX buffers (deep-copy area) */
+    self->tx_buffers = ptr;
+    ptr += (size_t)cfg->tx_buf_per_slot * cfg->tx_queue_depth;
+
+    /* Broadcast queue */
+    self->bcast_queue = (cr_tx_task_t *)ptr;
+    ptr += sizeof(cr_tx_task_t) * cfg->bcast_queue_depth;
+    memset(self->bcast_queue, 0, sizeof(cr_tx_task_t) * cfg->bcast_queue_depth);
+
+    /* Broadcast buffers */
+    self->bcast_buffers = ptr;
+    ptr += (size_t)cfg->mtu * cfg->bcast_queue_depth;
 
     /* RX slots */
     self->rx_slots = (cr_rx_slot_t *)ptr;
@@ -211,7 +231,12 @@ int cr_send(cr_instance_t *inst, uint8_t dest, uint8_t biz_id,
     }
 
     cr_tx_task_t *task = &self->tx_queue[self->tx_tail];
-    task->data = data;
+    if (len > self->cfg.tx_buf_per_slot) {
+        return CR_ERR_PARAM;
+    }
+    uint8_t *tx_buf = self->tx_buffers + (size_t)self->tx_tail * self->cfg.tx_buf_per_slot;
+    memcpy(tx_buf, data, len);
+    task->data = tx_buf;
     task->total_len = len;
     task->offset = 0;
     task->dest = dest;
@@ -234,7 +259,7 @@ int cr_broadcast(cr_instance_t *inst, uint8_t biz_id,
                  const uint8_t *data, uint16_t len) {
     cr_internal_t *self = CR_GET_INTERNAL(inst);
 
-    if (self->bcast_pending) {
+    if (self->bcast_count >= self->cfg.bcast_queue_depth) {
         return CR_ERR_QUEUE_FULL;
     }
 
@@ -242,14 +267,20 @@ int cr_broadcast(cr_instance_t *inst, uint8_t biz_id,
         return CR_ERR_PARAM;
     }
 
-    self->bcast_task.data = data;
-    self->bcast_task.total_len = len;
-    self->bcast_task.offset = 0;
-    self->bcast_task.dest = CR_BROADCAST_ADDR;
-    self->bcast_task.biz_id = biz_id & 0x0F;
-    self->bcast_task.seq = self->seq_counter++;
-    self->bcast_task.state = TX_STATE_SENDING;
-    self->bcast_pending = 1;
+    cr_tx_task_t *task = &self->bcast_queue[self->bcast_tail];
+    uint8_t *bcast_buf = self->bcast_buffers + (size_t)self->bcast_tail * self->cfg.mtu;
+    memcpy(bcast_buf, data, len);
+
+    task->data = bcast_buf;
+    task->total_len = len;
+    task->offset = 0;
+    task->dest = CR_BROADCAST_ADDR;
+    task->biz_id = biz_id & 0x0F;
+    task->seq = self->seq_counter++;
+    task->state = TX_STATE_SENDING;
+
+    self->bcast_tail = (self->bcast_tail + 1) % self->cfg.bcast_queue_depth;
+    self->bcast_count++;
 
     return 0;
 }
@@ -312,10 +343,12 @@ void cr_poll(cr_instance_t *inst) {
         }
     }
 
-    /* Process broadcast slot (independent of unicast) */
-    if (self->bcast_pending) {
-        cr_send_frame(self, &self->bcast_task, CR_BROADCAST_ADDR);
-        self->bcast_pending = 0;
+    /* Process broadcast queue (independent of unicast) */
+    if (self->bcast_count > 0) {
+        cr_tx_task_t *bcast = &self->bcast_queue[self->bcast_head];
+        cr_send_frame(self, bcast, CR_BROADCAST_ADDR);
+        self->bcast_head = (self->bcast_head + 1) % self->cfg.bcast_queue_depth;
+        self->bcast_count--;
     }
 
     /* Process unicast queue */

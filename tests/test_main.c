@@ -53,6 +53,11 @@ extern void test_rx_buffer_overflow_drops_slot(void);
 extern void test_multihop_intermediate_no_consume_ack(void);
 extern void test_star_topology_routing(void);
 extern void test_dedup_table_ring_overwrite(void);
+extern void test_send_deep_copy(void);
+extern void test_broadcast_deep_copy(void);
+extern void test_broadcast_queue_multiple(void);
+extern void test_broadcast_queue_full(void);
+extern void test_send_exceeds_tx_buf(void);
 
 void setUp(void) {}
 void tearDown(void) {}
@@ -110,5 +115,10 @@ int main(void) {
     RUN_TEST(test_multihop_intermediate_no_consume_ack);
     RUN_TEST(test_star_topology_routing);
     RUN_TEST(test_dedup_table_ring_overwrite);
+    RUN_TEST(test_send_deep_copy);
+    RUN_TEST(test_broadcast_deep_copy);
+    RUN_TEST(test_broadcast_queue_multiple);
+    RUN_TEST(test_broadcast_queue_full);
+    RUN_TEST(test_send_exceeds_tx_buf);
     return UNITY_END();
 }

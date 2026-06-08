@@ -18,13 +18,14 @@ static uint32_t mock_tick = 0;
 static uint32_t mock_get_tick(void) { return mock_tick; }
 
 void test_broadcast_single_frame(void) {
-    uint8_t buffer[1024];
+    uint8_t buffer[4096];
     cr_config_t cfg = {
         .local_addr = 0x01, .mtu = 64, .frame_interval_ms = 0,
         .ack_enabled = 0, .ack_mode = CR_ACK_MODE_REPLY,
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 16,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
+        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cr_instance_t inst;
@@ -50,13 +51,14 @@ void test_broadcast_single_frame(void) {
 }
 
 void test_broadcast_exceeds_mtu(void) {
-    uint8_t buffer[1024];
+    uint8_t buffer[4096];
     cr_config_t cfg = {
         .local_addr = 0x01, .mtu = 8, .frame_interval_ms = 0,
         .ack_enabled = 0, .ack_mode = CR_ACK_MODE_REPLY,
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 16,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
+        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cr_instance_t inst;
@@ -83,7 +85,7 @@ static void mock_recv_cb_b(cr_instance_t *i, uint8_t src, uint8_t biz_id,
 }
 
 static cr_instance_t inst_b;
-static uint8_t buf_b[1024];
+static uint8_t buf_b[4096];
 static cr_hal_t hal_b;
 static uint8_t sent_buf_b2[64];
 static uint16_t sent_len_b2;
@@ -109,6 +111,7 @@ static void setup_bcast_instance(uint8_t addr) {
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 16,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
+        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cr_init(&inst_b, &cfg, buf_b, sizeof(buf_b));
@@ -165,13 +168,14 @@ void test_broadcast_dedup(void) {
 }
 
 void test_broadcast_parallel_with_unicast(void) {
-    uint8_t buffer[1024];
+    uint8_t buffer[4096];
     cr_config_t cfg = {
         .local_addr = 0x01, .mtu = 8, .frame_interval_ms = 0,
         .ack_enabled = 0, .ack_mode = CR_ACK_MODE_REPLY,
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 16,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
+        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cr_instance_t inst_p;

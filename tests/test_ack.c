@@ -27,13 +27,14 @@ static void mock_on_complete(uint8_t status, void *ctx) {
 }
 
 void test_ack_disabled_fire_and_forget(void) {
-    uint8_t buffer[1024];
+    uint8_t buffer[4096];
     cr_config_t cfg = {
         .local_addr = 0x01, .mtu = 64, .frame_interval_ms = 0,
         .ack_enabled = 0, .ack_mode = CR_ACK_MODE_REPLY,
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 16,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
+        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cr_instance_t inst;
@@ -51,13 +52,14 @@ void test_ack_disabled_fire_and_forget(void) {
 }
 
 void test_long_data_complete_callback_ack_off(void) {
-    uint8_t buffer[1024];
+    uint8_t buffer[4096];
     cr_config_t cfg = {
         .local_addr = 0x01, .mtu = 8, .frame_interval_ms = 0,
         .ack_enabled = 0, .ack_mode = CR_ACK_MODE_REPLY,
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 16,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
+        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cr_instance_t inst;
@@ -79,7 +81,7 @@ void test_long_data_complete_callback_ack_off(void) {
 }
 
 void test_ack_reply_normal(void) {
-    uint8_t buffer[1024];
+    uint8_t buffer[4096];
     cr_config_t cfg = {
         .local_addr = 0x01, .mtu = 64, .frame_interval_ms = 0,
         .ack_enabled = 1, .ack_mode = CR_ACK_MODE_REPLY,
@@ -87,6 +89,7 @@ void test_ack_reply_normal(void) {
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 16,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
+        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cr_instance_t inst;
@@ -109,7 +112,7 @@ void test_ack_reply_normal(void) {
 }
 
 void test_ack_timeout_retransmit(void) {
-    uint8_t buffer[1024];
+    uint8_t buffer[4096];
     cr_config_t cfg = {
         .local_addr = 0x01, .mtu = 64, .frame_interval_ms = 0,
         .ack_enabled = 1, .ack_mode = CR_ACK_MODE_REPLY,
@@ -117,6 +120,7 @@ void test_ack_timeout_retransmit(void) {
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 16,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
+        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cr_instance_t inst;
@@ -137,7 +141,7 @@ void test_ack_timeout_retransmit(void) {
 }
 
 void test_ack_max_retries_fail(void) {
-    uint8_t buffer[1024];
+    uint8_t buffer[4096];
     cr_config_t cfg = {
         .local_addr = 0x01, .mtu = 64, .frame_interval_ms = 0,
         .ack_enabled = 1, .ack_mode = CR_ACK_MODE_REPLY,
@@ -145,6 +149,7 @@ void test_ack_max_retries_fail(void) {
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 16,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
+        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cr_instance_t inst;
@@ -168,7 +173,7 @@ void test_ack_max_retries_fail(void) {
 }
 
 void test_receiver_auto_sends_ack(void) {
-    uint8_t buffer[1024];
+    uint8_t buffer[4096];
     cr_config_t cfg = {
         .local_addr = 0x03, .mtu = 64, .frame_interval_ms = 0,
         .ack_enabled = 1, .ack_mode = CR_ACK_MODE_REPLY,
@@ -176,6 +181,7 @@ void test_receiver_auto_sends_ack(void) {
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 16,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
+        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cr_instance_t inst;
@@ -198,7 +204,7 @@ void test_receiver_auto_sends_ack(void) {
 }
 
 void test_ack_interrupt_mode(void) {
-    uint8_t buffer[1024];
+    uint8_t buffer[4096];
     cr_config_t cfg = {
         .local_addr = 0x01, .mtu = 64, .frame_interval_ms = 0,
         .ack_enabled = 1, .ack_mode = CR_ACK_MODE_INTERRUPT,
@@ -206,6 +212,7 @@ void test_ack_interrupt_mode(void) {
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 16,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
+        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cr_instance_t inst;
@@ -228,7 +235,7 @@ void test_ack_interrupt_mode(void) {
 }
 
 void test_long_data_complete_with_ack(void) {
-    uint8_t buffer[1024];
+    uint8_t buffer[4096];
     cr_config_t cfg = {
         .local_addr = 0x01, .mtu = 8, .frame_interval_ms = 0,
         .ack_enabled = 1, .ack_mode = CR_ACK_MODE_REPLY,
@@ -236,6 +243,7 @@ void test_long_data_complete_with_ack(void) {
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 16,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
+        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cr_instance_t inst;
