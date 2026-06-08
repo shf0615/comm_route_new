@@ -1041,3 +1041,83 @@ void test_error_notify_send_done_null(void) {
     cr_notify_send_done(NULL);
     TEST_ASSERT_TRUE(1);
 }
+
+/* ================================================================
+ * 补充覆盖: feature 规格中明确要求的场景
+ * ================================================================ */
+
+/* [Scenario补充] 单播转发时 TTL 不递减
+ * feature "中间节点透传转发" 明确要求：将该帧原样转发到下一跳
+ * 即 TTL 在单播转发中不应改变 */
+void test_unicast_forward_ttl_not_decremented(void) {
+    cr_route_entry_t routes[] = { {.dest = 0x03, .next_hop = 0x03} };
+    cr_config_t cfg = {
+        .local_addr = 0x02, .mtu = 64, .frame_interval_ms = 0,
+        .ack_enabled = 0, .ack_mode = CR_ACK_MODE_REPLY,
+        .default_ttl = 3, .tx_queue_depth = 4,
+        .rx_assem_count = 2, .dedup_table_size = 8,
+        .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
+        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .route_table = routes, .route_count = 1,
+    };
+    cov_setup(&cfg);
+
+    /* 单播帧: DST=0x03, SRC=0x01, CTL=0x00, SEQ=0, TTL=3 */
+    uint8_t frame[] = {0x03, 0x01, 0x00, 0x00, 0x03, 'D', 'A', 'T', 'A'};
+    cr_feed_frame(&cov_inst, frame, sizeof(frame));
+
+    /* 应转发 */
+    TEST_ASSERT_EQUAL_INT(1, cov_send_count);
+    /* 验证 TTL 未递减: 原始 TTL=3, 转发后仍为 3 */
+    TEST_ASSERT_EQUAL_UINT8(0x03, cov_sent_buf[4]);
+    /* 验证帧内容完全原样转发 */
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(frame, cov_sent_buf, sizeof(frame));
+}
+
+/* [Scenario补充] ACK 模式为 INTERRUPT 时，连续多帧长数据的完整流程
+ * 验证在 INTERRUPT 模式下，长数据的每一帧都通过 cr_notify_send_done 确认，
+ * 最终触发完成回调 */
+void test_interrupt_mode_long_data_multi_frame(void) {
+    cr_config_t cfg = {
+        .local_addr = 0x01, .mtu = 8, .frame_interval_ms = 0,
+        .max_retries = 3, .ack_timeout_ms = 100,
+        .ack_enabled = 1, .ack_mode = CR_ACK_MODE_INTERRUPT,
+        .default_ttl = 3, .tx_queue_depth = 4,
+        .rx_assem_count = 2, .dedup_table_size = 8,
+        .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
+        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .route_table = NULL, .route_count = 0,
+    };
+    cov_setup(&cfg);
+    cov_hal.send = cov_mock_send_history;
+    cr_set_hal(&cov_inst, &cov_hal);
+
+    /* 20 bytes → 3 frames with MTU=8 (8+8+4) */
+    uint8_t data[20];
+    for (int i = 0; i < 20; i++) data[i] = (uint8_t)(i + 0x10);
+    cov_complete_called = 0;
+    cr_send(&cov_inst, 0x03, 0, data, 20, cov_on_complete, NULL);
+
+    /* 逐帧发送 + 中断确认 */
+    for (int i = 0; i < 3; i++) {
+        cr_poll(&cov_inst); /* 发送帧 i */
+        TEST_ASSERT_EQUAL_INT(i + 1, cov_send_history_count);
+
+        /* 模拟中断确认 */
+        cr_notify_send_done(&cov_inst);
+        cr_poll(&cov_inst); /* 处理确认 */
+    }
+
+    /* 验证完成回调：3 帧全部确认后触发 */
+    TEST_ASSERT_EQUAL_INT(1, cov_complete_called);
+    TEST_ASSERT_EQUAL_UINT8(0, cov_complete_status);
+
+    /* 验证 3 帧确实发出 */
+    TEST_ASSERT_EQUAL_INT(3, cov_send_history_count);
+    /* 帧1: 5头 + 8负载 */
+    TEST_ASSERT_EQUAL_UINT16(13, cov_send_history_len[0]);
+    /* 帧2: 5头 + 8负载 */
+    TEST_ASSERT_EQUAL_UINT16(13, cov_send_history_len[1]);
+    /* 帧3: 5头 + 4负载 */
+    TEST_ASSERT_EQUAL_UINT16(9, cov_send_history_len[2]);
+}

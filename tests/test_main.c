@@ -95,6 +95,8 @@ extern void test_safety_send_null_instance(void);
 extern void test_safety_broadcast_null_instance(void);
 extern void test_error_poll_null_instance(void);
 extern void test_error_notify_send_done_null(void);
+extern void test_unicast_forward_ttl_not_decremented(void);
+extern void test_interrupt_mode_long_data_multi_frame(void);
 
 void setUp(void) {}
 void tearDown(void) {}
@@ -193,5 +195,7 @@ int main(void) {
     RUN_TEST(test_safety_broadcast_null_instance);
     RUN_TEST(test_error_poll_null_instance);
     RUN_TEST(test_error_notify_send_done_null);
+    RUN_TEST(test_unicast_forward_ttl_not_decremented);
+    RUN_TEST(test_interrupt_mode_long_data_multi_frame);
     return UNITY_END();
 }
