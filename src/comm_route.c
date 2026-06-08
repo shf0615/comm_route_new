@@ -268,7 +268,44 @@ void cr_poll(cr_instance_t *inst) {
 }
 
 void cr_feed_frame(cr_instance_t *inst, const uint8_t *data, uint16_t len) {
-    (void)inst; (void)data; (void)len; /* stub */
+    cr_internal_t *self = CR_GET_INTERNAL(inst);
+
+    if (len < CR_FRAME_HEADER_SIZE) {
+        return; /* invalid frame */
+    }
+
+    uint8_t dst = data[0];
+    uint8_t src = data[1];
+    uint8_t ctl = data[2];
+    /* uint8_t seq = data[3]; */
+    /* uint8_t ttl = data[4]; */
+
+    uint8_t biz_id = ctl & 0x0F;
+    const uint8_t *payload = &data[CR_FRAME_HEADER_SIZE];
+    uint16_t payload_len = len - CR_FRAME_HEADER_SIZE;
+
+    if (dst == self->cfg.local_addr) {
+        /* Addressed to us */
+        uint8_t is_ack = (ctl >> 7) & 1;
+        if (is_ack) {
+            /* TODO: match active task SEQ */
+            return;
+        }
+
+        /* Data frame for us — deliver to user */
+        if (self->recv_cb) {
+            self->recv_cb(inst, src, biz_id, payload, payload_len, self->recv_ctx);
+        }
+    } else if (dst == 0xFF) {
+        /* Broadcast — TODO */
+    } else {
+        /* Not for us — route and forward */
+        uint8_t next_hop = cr_route_lookup(self, dst);
+        if (next_hop != 0xFF) {
+            self->hal->send(self->hal->hw_ctx, data, len);
+        }
+        /* else: no route, drop */
+    }
 }
 
 void cr_notify_send_done(cr_instance_t *inst) {
