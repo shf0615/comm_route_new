@@ -6,13 +6,16 @@
 static uint8_t sent_a[64], sent_b[64], sent_c[64];
 static uint16_t sent_a_len, sent_b_len, sent_c_len;
 
-static int send_a(void *ctx, const uint8_t *data, uint16_t len) {
+static int send_a(void *ctx, uint8_t next_hop, const uint8_t *data, uint16_t len) {
+    (void)next_hop;
     (void)ctx; memcpy(sent_a, data, len); sent_a_len = len; return 0;
 }
-static int send_b(void *ctx, const uint8_t *data, uint16_t len) {
+static int send_b(void *ctx, uint8_t next_hop, const uint8_t *data, uint16_t len) {
+    (void)next_hop;
     (void)ctx; memcpy(sent_b, data, len); sent_b_len = len; return 0;
 }
-static int send_c(void *ctx, const uint8_t *data, uint16_t len) {
+static int send_c(void *ctx, uint8_t next_hop, const uint8_t *data, uint16_t len) {
+    (void)next_hop;
     (void)ctx; memcpy(sent_c, data, len); sent_c_len = len; return 0;
 }
 

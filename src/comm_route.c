@@ -12,6 +12,7 @@ typedef struct {
     uint16_t       offset;
     uint16_t       frame_offset;  /* offset before last send (for retransmit) */
     uint8_t        dest;
+    uint8_t        next_hop;      /* resolved at cr_send time */
     uint8_t        biz_id;
     uint8_t        seq;
     uint8_t        ack_seq;       /* SEQ of last sent frame (for ACK matching) */
@@ -160,6 +161,7 @@ int cr_send(cr_instance_t *inst, uint8_t dest, uint8_t biz_id,
     task->total_len = len;
     task->offset = 0;
     task->dest = dest;
+    task->next_hop = cr_route_lookup(self, dest);
     task->biz_id = biz_id & 0x0F;
     task->seq = self->seq_counter++;
     task->retries = 0;
@@ -194,7 +196,7 @@ int cr_broadcast(cr_instance_t *inst, uint8_t biz_id,
     return 0;
 }
 
-static void cr_send_frame(cr_internal_t *self, cr_tx_task_t *task) {
+static void cr_send_frame(cr_internal_t *self, cr_tx_task_t *task, uint8_t next_hop) {
     uint16_t payload_len = task->total_len - task->offset;
     uint8_t is_broadcast = (task->dest == 0xFF) ? 1 : 0;
     uint8_t is_multi = (task->total_len > self->cfg.mtu) ? 1 : 0;
@@ -218,7 +220,7 @@ static void cr_send_frame(cr_internal_t *self, cr_tx_task_t *task) {
 
     memcpy(&frame[CR_FRAME_HEADER_SIZE], task->data + task->offset, payload_len);
 
-    self->hal->send(self->hal->hw_ctx, frame, CR_FRAME_HEADER_SIZE + payload_len);
+    self->hal->send(self->hal->hw_ctx, next_hop, frame, CR_FRAME_HEADER_SIZE + payload_len);
 
     task->ack_seq = task->seq;  /* record SEQ for ACK matching */
     task->frame_offset = task->offset;  /* record for retransmit */
@@ -246,7 +248,7 @@ void cr_poll(cr_instance_t *inst) {
 
     /* Process broadcast slot (independent of unicast) */
     if (self->bcast_pending) {
-        cr_send_frame(self, &self->bcast_task);
+        cr_send_frame(self, &self->bcast_task, 0xFF);
         self->bcast_pending = 0;
     }
 
@@ -267,7 +269,7 @@ void cr_poll(cr_instance_t *inst) {
                 return; /* wait for interval */
             }
 
-            cr_send_frame(self, task);
+            cr_send_frame(self, task, task->next_hop);
 
             if (!self->cfg.ack_enabled) {
                 /* Check if done */
@@ -310,7 +312,7 @@ void cr_poll(cr_instance_t *inst) {
                     task->retries++;
                     task->offset = task->frame_offset;
                     task->state = TX_STATE_SENDING;
-                    cr_send_frame(self, task);
+                    cr_send_frame(self, task, task->next_hop);
                     task->state = TX_STATE_WAIT_ACK;
                 }
             }
@@ -432,13 +434,14 @@ void cr_feed_frame(cr_instance_t *inst, const uint8_t *data, uint16_t len) {
         /* Auto-send ACK if enabled and mode is REPLY */
         if (self->cfg.ack_enabled && self->cfg.ack_mode == CR_ACK_MODE_REPLY) {
             uint8_t seq_val = data[3];
+            uint8_t ack_next = cr_route_lookup(self, src);
             uint8_t ack_frame[CR_FRAME_HEADER_SIZE];
             ack_frame[0] = src;                    /* DST = original sender */
             ack_frame[1] = self->cfg.local_addr;   /* SRC = us */
             ack_frame[2] = 0x80;                   /* CTL: bit7=1 (ACK) */
             ack_frame[3] = seq_val;                /* SEQ = same as received */
             ack_frame[4] = self->cfg.default_ttl;  /* TTL */
-            self->hal->send(self->hal->hw_ctx, ack_frame, CR_FRAME_HEADER_SIZE);
+            self->hal->send(self->hal->hw_ctx, ack_next, ack_frame, CR_FRAME_HEADER_SIZE);
         }
     } else if (dst == 0xFF) {
         /* Broadcast frame */
@@ -470,13 +473,13 @@ void cr_feed_frame(cr_instance_t *inst, const uint8_t *data, uint16_t len) {
             uint8_t fwd_frame[CR_FRAME_HEADER_SIZE + 256];
             memcpy(fwd_frame, data, len);
             fwd_frame[4] = ttl - 1;
-            self->hal->send(self->hal->hw_ctx, fwd_frame, len);
+            self->hal->send(self->hal->hw_ctx, 0xFF, fwd_frame, len);
         }
     } else {
         /* Not for us — route and forward */
         uint8_t next_hop = cr_route_lookup(self, dst);
         if (next_hop != 0xFF) {
-            self->hal->send(self->hal->hw_ctx, data, len);
+            self->hal->send(self->hal->hw_ctx, next_hop, data, len);
         }
         /* else: no route, drop */
     }

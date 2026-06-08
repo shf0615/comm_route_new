@@ -43,7 +43,7 @@ typedef struct {
 
 /* HAL */
 typedef struct {
-    int (*send)(void *hw_ctx, const uint8_t *data, uint16_t len);
+    int (*send)(void *hw_ctx, uint8_t next_hop, const uint8_t *data, uint16_t len);
     uint32_t (*get_tick_ms)(void);
     void *hw_ctx;
 } cr_hal_t;

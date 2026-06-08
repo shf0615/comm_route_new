@@ -42,7 +42,8 @@ void test_init_fails_with_insufficient_buffer(void) {
     TEST_ASSERT_EQUAL_INT(-3, ret);
 }
 
-static int dummy_send(void *ctx, const uint8_t *data, uint16_t len) {
+static int dummy_send(void *ctx, uint8_t next_hop, const uint8_t *data, uint16_t len) {
+    (void)next_hop;
     (void)ctx; (void)data; (void)len; return 0;
 }
 static uint32_t dummy_tick(void) { return 0; }

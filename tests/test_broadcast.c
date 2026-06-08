@@ -6,7 +6,8 @@ static uint8_t sent_buf[64];
 static uint16_t sent_len;
 static int send_count;
 
-static int mock_send(void *ctx, const uint8_t *data, uint16_t len) {
+static int mock_send(void *ctx, uint8_t next_hop, const uint8_t *data, uint16_t len) {
+    (void)next_hop;
     memcpy(sent_buf, data, len);
     sent_len = len;
     send_count++;
@@ -89,7 +90,8 @@ static uint16_t sent_len_b2;
 static int send_count_b2;
 static uint8_t send_history_b2[10][64];
 
-static int mock_send_b2(void *ctx, const uint8_t *data, uint16_t len) {
+static int mock_send_b2(void *ctx, uint8_t next_hop, const uint8_t *data, uint16_t len) {
+    (void)next_hop;
     (void)ctx;
     memcpy(sent_buf_b2, data, len);
     if (send_count_b2 < 10) {

@@ -65,9 +65,8 @@ static node_t *node_by_addr(uint8_t a) {
     return NULL;
 }
 
-/* HAL send: 点对点投递。对于只有一个邻居的节点，直接投递。
-   对于多邻居节点（Hub），根据帧的 DST 选择投递目标。 */
-static int hal_send(void *ctx, const uint8_t *data, uint16_t len) {
+/* HAL send: 利用 next_hop 精确投递到对应邻居 */
+static int hal_send(void *ctx, uint8_t next_hop, const uint8_t *data, uint16_t len) {
     node_t *s = (node_t *)ctx;
     uint8_t ctl = data[2];
     uint8_t dst = data[0];
@@ -82,34 +81,18 @@ static int hal_send(void *ctx, const uint8_t *data, uint16_t len) {
     }
     printf("\n");
 
-    if (s->link_count == 1) {
-        /* 单邻居：直接投递（叶子/链端） */
-        inbox_put(&s->links[0]->inbox, data, len);
-    } else if (dst == 0xFF) {
+    if (next_hop == 0xFF) {
         /* 广播：投递给所有邻居 */
         for (uint8_t i = 0; i < s->link_count; i++)
             inbox_put(&s->links[i]->inbox, data, len);
     } else {
-        /* 多邻居：查本节点路由表找 next_hop，精确投递 */
-        /* 从 cr_config_t 获取路由表（节点初始化时保存） */
-        uint8_t next_hop = dst; /* fallback: 假设直连 */
-        cr_config_t *cfg = (cr_config_t *)s->buf; /* cfg 是 internal 的第一个字段 */
-        for (uint8_t r = 0; r < cfg->route_count; r++) {
-            if (cfg->route_table[r].dest == dst) {
-                next_hop = cfg->route_table[r].next_hop;
-                break;
-            }
-        }
-        /* 投递给 next_hop 对应的邻居 */
+        /* 单播：投递给 next_hop 对应的邻居 */
         for (uint8_t i = 0; i < s->link_count; i++) {
             if (s->links[i]->addr == next_hop) {
                 inbox_put(&s->links[i]->inbox, data, len);
                 return 0;
             }
         }
-        /* next_hop 不在邻居中（不应发生），投递给所有 */
-        for (uint8_t i = 0; i < s->link_count; i++)
-            inbox_put(&s->links[i]->inbox, data, len);
     }
     return 0;
 }
