@@ -52,3 +52,24 @@ void test_unicast_send_single_frame(void) {
     /* total length = 5 header + 5 payload */
     TEST_ASSERT_EQUAL_UINT16(10, sent_len);
 }
+
+void test_send_queue_full(void) {
+    uint8_t buffer[1024];
+    cr_config_t cfg = {
+        .local_addr = 0x01, .mtu = 64, .frame_interval_ms = 0,
+        .ack_enabled = 0, .ack_mode = CR_ACK_MODE_REPLY,
+        .default_ttl = 3, .tx_queue_depth = 2,
+        .rx_assem_count = 1, .dedup_table_size = 8,
+        .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
+        .route_table = NULL, .route_count = 0,
+    };
+    cr_instance_t inst;
+    cr_init(&inst, &cfg, buffer, sizeof(buffer));
+    cr_hal_t hal = { .send = mock_send, .get_tick_ms = mock_get_tick, .hw_ctx = NULL };
+    cr_set_hal(&inst, &hal);
+
+    uint8_t data[] = {1, 2, 3};
+    TEST_ASSERT_EQUAL_INT(0, cr_send(&inst, 0x02, 0, data, 3, NULL, NULL));
+    TEST_ASSERT_EQUAL_INT(0, cr_send(&inst, 0x03, 0, data, 3, NULL, NULL));
+    TEST_ASSERT_EQUAL_INT(-1, cr_send(&inst, 0x04, 0, data, 3, NULL, NULL));
+}
