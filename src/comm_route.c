@@ -60,6 +60,8 @@ typedef struct {
     uint8_t             dedup_write_idx;
     /* Sequence counter */
     uint8_t             seq_counter;
+    /* Interrupt ACK flag */
+    volatile uint8_t    send_done_flag;
 } cr_internal_t;
 
 /* ===== 辅助宏 ===== */
@@ -266,6 +268,21 @@ void cr_poll(cr_instance_t *inst) {
                 task->state = TX_STATE_WAIT_ACK;
             }
         } else if (task->state == TX_STATE_WAIT_ACK) {
+            /* Check interrupt ACK mode */
+            if (self->cfg.ack_mode == CR_ACK_MODE_INTERRUPT && self->send_done_flag) {
+                self->send_done_flag = 0;
+                if (task->offset >= task->total_len) {
+                    if (task->on_complete) {
+                        task->on_complete(0, task->user_ctx);
+                    }
+                    self->active_unicast = NULL;
+                } else {
+                    task->state = TX_STATE_SENDING;
+                }
+                return;
+            }
+
+            /* Reply mode: check timeout */
             uint32_t now = self->hal->get_tick_ms();
             if ((now - task->last_tick) >= self->cfg.ack_timeout_ms) {
                 if (task->retries >= self->cfg.max_retries) {
@@ -449,5 +466,6 @@ void cr_feed_frame(cr_instance_t *inst, const uint8_t *data, uint16_t len) {
 }
 
 void cr_notify_send_done(cr_instance_t *inst) {
-    (void)inst; /* stub */
+    cr_internal_t *self = CR_GET_INTERNAL(inst);
+    self->send_done_flag = 1;
 }

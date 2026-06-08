@@ -195,3 +195,33 @@ void test_receiver_auto_sends_ack(void) {
     TEST_ASSERT_BITS(0x80, 0x80, sent_buf[2]);   /* CTL.bit7=1 (ACK) */
     TEST_ASSERT_EQUAL_UINT8(0x05, sent_buf[3]);  /* SEQ匹配 */
 }
+
+void test_ack_interrupt_mode(void) {
+    uint8_t buffer[1024];
+    cr_config_t cfg = {
+        .local_addr = 0x01, .mtu = 64, .frame_interval_ms = 0,
+        .ack_enabled = 1, .ack_mode = CR_ACK_MODE_INTERRUPT,
+        .ack_timeout_ms = 100, .max_retries = 3,
+        .default_ttl = 3, .tx_queue_depth = 4,
+        .rx_assem_count = 2, .dedup_table_size = 16,
+        .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
+        .route_table = NULL, .route_count = 0,
+    };
+    cr_instance_t inst;
+    cr_init(&inst, &cfg, buffer, sizeof(buffer));
+    cr_hal_t hal = { .send = mock_send, .get_tick_ms = mock_get_tick, .hw_ctx = NULL };
+    cr_set_hal(&inst, &hal);
+
+    complete_called = 0;
+    mock_tick = 0;
+    uint8_t data[] = {1, 2, 3};
+    cr_send(&inst, 0x03, 0, data, 3, mock_on_complete, NULL);
+    cr_poll(&inst); /* sends frame, enters WAIT_ACK */
+    TEST_ASSERT_EQUAL_INT(0, complete_called);
+
+    cr_notify_send_done(&inst); /* 模拟中断 */
+    cr_poll(&inst);
+
+    TEST_ASSERT_EQUAL_INT(1, complete_called);
+    TEST_ASSERT_EQUAL_UINT8(0, complete_status);
+}

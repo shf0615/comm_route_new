@@ -87,10 +87,14 @@ static cr_hal_t hal_b;
 static uint8_t sent_buf_b2[64];
 static uint16_t sent_len_b2;
 static int send_count_b2;
+static uint8_t send_history_b2[10][64];
 
 static int mock_send_b2(void *ctx, const uint8_t *data, uint16_t len) {
     (void)ctx;
     memcpy(sent_buf_b2, data, len);
+    if (send_count_b2 < 10) {
+        memcpy(send_history_b2[send_count_b2], data, len);
+    }
     sent_len_b2 = len;
     send_count_b2++;
     return 0;
@@ -156,4 +160,46 @@ void test_broadcast_dedup(void) {
     cr_feed_frame(&inst_b, frame, sizeof(frame));
     TEST_ASSERT_EQUAL_INT(0, recv_called_b);
     TEST_ASSERT_EQUAL_INT(0, send_count_b2);
+}
+
+void test_broadcast_parallel_with_unicast(void) {
+    uint8_t buffer[1024];
+    cr_config_t cfg = {
+        .local_addr = 0x01, .mtu = 8, .frame_interval_ms = 0,
+        .ack_enabled = 0, .ack_mode = CR_ACK_MODE_REPLY,
+        .default_ttl = 3, .tx_queue_depth = 4,
+        .rx_assem_count = 2, .dedup_table_size = 16,
+        .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
+        .route_table = NULL, .route_count = 0,
+    };
+    cr_instance_t inst_p;
+    cr_init(&inst_p, &cfg, buffer, sizeof(buffer));
+    cr_hal_t hal_p = { .send = mock_send_b2, .get_tick_ms = mock_get_tick, .hw_ctx = NULL };
+    cr_set_hal(&inst_p, &hal_p);
+
+    send_count_b2 = 0;
+    uint8_t data[20] = {0};
+    cr_send(&inst_p, 0x03, 0, data, 20, NULL, NULL);
+
+    cr_poll(&inst_p); /* 单播帧1 */
+    cr_poll(&inst_p); /* 单播帧2 */
+    TEST_ASSERT_EQUAL_INT(2, send_count_b2);
+
+    /* 提交广播 */
+    uint8_t bcast[] = "BC";
+    cr_broadcast(&inst_p, 1, bcast, 2);
+
+    cr_poll(&inst_p); /* 应发出广播帧 + 单播帧3 */
+
+    /* 验证广播帧被发出（检查 send 记录中有 DST=0xFF） */
+    int found_broadcast = 0;
+    int total_after = send_count_b2;
+    /* 至少多了一次广播发送 */
+    TEST_ASSERT_TRUE(total_after >= 3);
+
+    /* 遍历检查最后几帧 */
+    for (int i = 2; i < total_after; i++) {
+        if (send_history_b2[i][0] == 0xFF) found_broadcast = 1;
+    }
+    TEST_ASSERT_EQUAL_INT(1, found_broadcast);
 }
