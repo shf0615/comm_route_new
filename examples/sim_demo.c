@@ -49,7 +49,7 @@ typedef struct sim_node {
     const char   *color;
     cr_instance_t inst;
     cr_hal_t      hal;
-    uint8_t       buf[2048];
+    uint8_t       buf[4096];
     inbox_t       inbox;
     /* 点对点连接: 每条链路指向对端节点指针 */
     struct sim_node *links[MAX_NODES];
@@ -123,6 +123,7 @@ static void node_init(node_t *n, uint8_t addr, const char *name, const char *col
         .ack_mode = CR_ACK_MODE_REPLY, .default_ttl = 4,
         .tx_queue_depth = 8, .rx_assem_count = 4, .dedup_table_size = 16,
         .rx_assem_timeout_ms = 5000, .rx_buf_per_slot = 256,
+        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
         .route_table = rt, .route_count = rc,
     };
     cr_init(&n->inst, &cfg, n->buf, sizeof(n->buf));
