@@ -297,7 +297,34 @@ void cr_feed_frame(cr_instance_t *inst, const uint8_t *data, uint16_t len) {
             self->recv_cb(inst, src, biz_id, payload, payload_len, self->recv_ctx);
         }
     } else if (dst == 0xFF) {
-        /* Broadcast — TODO */
+        /* Broadcast frame */
+        uint8_t seq = data[3];
+        uint8_t ttl = data[4];
+
+        /* Dedup check */
+        for (uint8_t i = 0; i < self->cfg.dedup_table_size; i++) {
+            if (self->dedup_table[i].src == src && self->dedup_table[i].seq == seq) {
+                return; /* duplicate, drop */
+            }
+        }
+
+        /* Record in dedup table (ring overwrite) */
+        self->dedup_table[self->dedup_write_idx].src = src;
+        self->dedup_table[self->dedup_write_idx].seq = seq;
+        self->dedup_write_idx = (self->dedup_write_idx + 1) % self->cfg.dedup_table_size;
+
+        /* Deliver to user */
+        if (self->recv_cb) {
+            self->recv_cb(inst, src, biz_id, payload, payload_len, self->recv_ctx);
+        }
+
+        /* Forward with TTL-1 if TTL > 0 */
+        if (ttl > 0) {
+            uint8_t fwd_frame[CR_FRAME_HEADER_SIZE + 256];
+            memcpy(fwd_frame, data, len);
+            fwd_frame[4] = ttl - 1;
+            self->hal->send(self->hal->hw_ctx, fwd_frame, len);
+        }
     } else {
         /* Not for us — route and forward */
         uint8_t next_hop = cr_route_lookup(self, dst);
