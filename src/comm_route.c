@@ -48,6 +48,9 @@ typedef struct {
     uint8_t             tx_count;
     /* Active unicast slot */
     cr_tx_task_t       *active_unicast;
+    /* Broadcast slot */
+    cr_tx_task_t        bcast_task;
+    uint8_t             bcast_pending;
     /* RX assembly */
     cr_rx_slot_t       *rx_slots;
     uint8_t            *rx_buffers;
@@ -168,12 +171,27 @@ int cr_send(cr_instance_t *inst, uint8_t dest, uint8_t biz_id,
 
 int cr_broadcast(cr_instance_t *inst, uint8_t biz_id,
                  const uint8_t *data, uint16_t len) {
-    (void)inst; (void)biz_id; (void)data; (void)len;
-    return -2; /* stub */
+    cr_internal_t *self = CR_GET_INTERNAL(inst);
+
+    if (len > self->cfg.mtu) {
+        return -2;
+    }
+
+    self->bcast_task.data = data;
+    self->bcast_task.total_len = len;
+    self->bcast_task.offset = 0;
+    self->bcast_task.dest = 0xFF;
+    self->bcast_task.biz_id = biz_id & 0x0F;
+    self->bcast_task.seq = self->seq_counter++;
+    self->bcast_task.state = TX_STATE_SENDING;
+    self->bcast_pending = 1;
+
+    return 0;
 }
 
 static void cr_send_frame(cr_internal_t *self, cr_tx_task_t *task) {
     uint16_t payload_len = task->total_len - task->offset;
+    uint8_t is_broadcast = (task->dest == 0xFF) ? 1 : 0;
     uint8_t is_multi = (task->total_len > self->cfg.mtu) ? 1 : 0;
     uint8_t is_last = 0;
 
@@ -188,8 +206,8 @@ static void cr_send_frame(cr_internal_t *self, cr_tx_task_t *task) {
     uint8_t frame[CR_FRAME_HEADER_SIZE + 256]; /* max frame */
     frame[0] = task->dest;                     /* DST */
     frame[1] = self->cfg.local_addr;           /* SRC */
-    /* CTL: bit7=ACK(0), bit6=broadcast(0), bit5=frag, bit4=last, bit3-0=biz_id */
-    frame[2] = (uint8_t)((is_multi << 5) | (is_last << 4) | (task->biz_id & 0x0F));
+    /* CTL: bit7=ACK(0), bit6=broadcast, bit5=frag, bit4=last, bit3-0=biz_id */
+    frame[2] = (uint8_t)((is_broadcast << 6) | (is_multi << 5) | (is_last << 4) | (task->biz_id & 0x0F));
     frame[3] = task->seq;                      /* SEQ */
     frame[4] = self->cfg.default_ttl;          /* TTL */
 
@@ -207,6 +225,12 @@ static void cr_send_frame(cr_internal_t *self, cr_tx_task_t *task) {
 
 void cr_poll(cr_instance_t *inst) {
     cr_internal_t *self = CR_GET_INTERNAL(inst);
+
+    /* Process broadcast slot (independent of unicast) */
+    if (self->bcast_pending) {
+        cr_send_frame(self, &self->bcast_task);
+        self->bcast_pending = 0;
+    }
 
     /* Process unicast queue */
     if (self->active_unicast == NULL && self->tx_count > 0) {
