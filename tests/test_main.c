@@ -32,6 +32,28 @@ extern void test_rx_assembly_timeout(void);
 extern void test_rx_slot_full_drops_new(void);
 extern void test_rx_duplicate_frame_ignored(void);
 
+/* test_extra.c */
+extern void test_send_zero_length_data(void);
+extern void test_broadcast_zero_length(void);
+extern void test_send_exactly_mtu(void);
+extern void test_send_mtu_plus_one(void);
+extern void test_seq_counter_wraps(void);
+extern void test_feed_frame_too_short(void);
+extern void test_feed_frame_exactly_header(void);
+extern void test_rx_out_of_order_frame_dropped(void);
+extern void test_ack_wrong_seq_ignored(void);
+extern void test_poll_no_task_no_crash(void);
+extern void test_feed_frame_no_hal_set(void);
+extern void test_interrupt_mode_no_timeout(void);
+extern void test_init_null_instance(void);
+extern void test_init_null_config(void);
+extern void test_init_null_buffer(void);
+extern void test_broadcast_busy_returns_error(void);
+extern void test_rx_buffer_overflow_drops_slot(void);
+extern void test_multihop_intermediate_no_consume_ack(void);
+extern void test_star_topology_routing(void);
+extern void test_dedup_table_ring_overwrite(void);
+
 void setUp(void) {}
 void tearDown(void) {}
 
@@ -67,5 +89,26 @@ int main(void) {
     RUN_TEST(test_rx_assembly_timeout);
     RUN_TEST(test_rx_slot_full_drops_new);
     RUN_TEST(test_rx_duplicate_frame_ignored);
+    /* test_extra.c */
+    RUN_TEST(test_send_zero_length_data);
+    RUN_TEST(test_broadcast_zero_length);
+    RUN_TEST(test_send_exactly_mtu);
+    RUN_TEST(test_send_mtu_plus_one);
+    RUN_TEST(test_seq_counter_wraps);
+    RUN_TEST(test_feed_frame_too_short);
+    RUN_TEST(test_feed_frame_exactly_header);
+    RUN_TEST(test_rx_out_of_order_frame_dropped);
+    RUN_TEST(test_ack_wrong_seq_ignored);
+    RUN_TEST(test_poll_no_task_no_crash);
+    RUN_TEST(test_feed_frame_no_hal_set);
+    RUN_TEST(test_interrupt_mode_no_timeout);
+    RUN_TEST(test_init_null_instance);
+    RUN_TEST(test_init_null_config);
+    RUN_TEST(test_init_null_buffer);
+    RUN_TEST(test_broadcast_busy_returns_error);
+    RUN_TEST(test_rx_buffer_overflow_drops_slot);
+    RUN_TEST(test_multihop_intermediate_no_consume_ack);
+    RUN_TEST(test_star_topology_routing);
+    RUN_TEST(test_dedup_table_ring_overwrite);
     return UNITY_END();
 }

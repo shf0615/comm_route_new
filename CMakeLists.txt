@@ -16,7 +16,7 @@ FetchContent_MakeAvailable(unity)
 
 # 测试
 enable_testing()
-add_executable(test_all tests/test_main.c tests/test_instance.c tests/test_send.c tests/test_broadcast.c tests/test_recv.c tests/test_ack.c tests/test_multihop.c)
+add_executable(test_all tests/test_main.c tests/test_instance.c tests/test_send.c tests/test_broadcast.c tests/test_recv.c tests/test_ack.c tests/test_multihop.c tests/test_extra.c)
 target_link_libraries(test_all comm_route unity)
 add_test(NAME unit_tests COMMAND test_all)
 

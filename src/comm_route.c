@@ -296,6 +296,10 @@ static void cr_send_frame(cr_internal_t *self, cr_tx_task_t *task, uint8_t next_
 void cr_poll(cr_instance_t *inst) {
     cr_internal_t *self = CR_GET_INTERNAL(inst);
 
+    if (self->hal == NULL) {
+        return;
+    }
+
     /* Check RX assembly timeouts (skip if no active slots) */
     if (self->rx_active_count > 0 && self->cfg.rx_assem_timeout_ms > 0) {
         uint32_t now = self->hal->get_tick_ms();
@@ -563,6 +567,10 @@ void cr_feed_frame(cr_instance_t *inst, const uint8_t *data, uint16_t len) {
 
     if (len < CR_FRAME_HEADER_SIZE) {
         return; /* invalid frame */
+    }
+
+    if (self->hal == NULL) {
+        return;
     }
 
     uint8_t dst = data[0];
