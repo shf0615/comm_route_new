@@ -25,6 +25,9 @@ extern void test_receive_unicast_single_frame(void);
 extern void test_forward_frame_to_next_hop(void);
 extern void test_drop_frame_no_route(void);
 extern void test_receive_multi_frame_assembly(void);
+extern void test_rx_assembly_timeout(void);
+extern void test_rx_slot_full_drops_new(void);
+extern void test_rx_duplicate_frame_ignored(void);
 
 void setUp(void) {}
 void tearDown(void) {}
@@ -55,5 +58,8 @@ int main(void) {
     RUN_TEST(test_forward_frame_to_next_hop);
     RUN_TEST(test_drop_frame_no_route);
     RUN_TEST(test_receive_multi_frame_assembly);
+    RUN_TEST(test_rx_assembly_timeout);
+    RUN_TEST(test_rx_slot_full_drops_new);
+    RUN_TEST(test_rx_duplicate_frame_ignored);
     return UNITY_END();
 }

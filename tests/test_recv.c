@@ -122,3 +122,60 @@ void test_receive_multi_frame_assembly(void) {
     for (int i = 0; i < 20; i++) expected[i] = (uint8_t)i;
     TEST_ASSERT_EQUAL_UINT8_ARRAY(expected, recv_data, 20);
 }
+
+void test_rx_assembly_timeout(void) {
+    setup_instance(0x02, NULL, 0);
+    /* 喂入帧0和帧1（分片，非末帧） */
+    uint8_t f0[] = {0x02, 0x01, 0x20, 0x00, 0x03, 1,2,3,4,5,6,7,8};
+    uint8_t f1[] = {0x02, 0x01, 0x20, 0x01, 0x03, 9,10,11,12,13,14,15,16};
+    cr_feed_frame(&inst, f0, sizeof(f0));
+    cr_feed_frame(&inst, f1, sizeof(f1));
+    TEST_ASSERT_EQUAL_INT(0, recv_called);
+
+    /* 推进时间超过超时 */
+    mock_tick = 1100; /* rx_assem_timeout_ms=1000 */
+    cr_poll(&inst);
+
+    /* 帧2(末帧)到达——槽已释放，应该不触发回调 */
+    recv_called = 0;
+    uint8_t f2[] = {0x02, 0x01, 0x30, 0x02, 0x03, 17,18,19,20};
+    cr_feed_frame(&inst, f2, sizeof(f2));
+    /* SEQ=2 但无活跃槽（已释放），无法匹配，不触发 */
+    TEST_ASSERT_EQUAL_INT(0, recv_called);
+}
+
+void test_rx_slot_full_drops_new(void) {
+    /* rx_assem_count=2 in setup */
+    setup_instance(0x02, NULL, 0);
+
+    /* 占满2个槽 */
+    uint8_t f_a[] = {0x02, 0x01, 0x20, 0x00, 0x03, 1,2,3};
+    uint8_t f_b[] = {0x02, 0x03, 0x20, 0x00, 0x03, 4,5,6};
+    cr_feed_frame(&inst, f_a, sizeof(f_a));
+    cr_feed_frame(&inst, f_b, sizeof(f_b));
+
+    /* 第三个源的首帧 */
+    uint8_t f_c[] = {0x02, 0x04, 0x20, 0x00, 0x03, 7,8,9};
+    cr_feed_frame(&inst, f_c, sizeof(f_c));
+    /* 无可用槽，丢弃 */
+    TEST_ASSERT_EQUAL_INT(0, recv_called);
+}
+
+void test_rx_duplicate_frame_ignored(void) {
+    setup_instance(0x02, NULL, 0);
+
+    uint8_t f0[] = {0x02, 0x01, 0x20, 0x00, 0x03, 1,2,3,4,5,6,7,8};
+    uint8_t f1[] = {0x02, 0x01, 0x20, 0x01, 0x03, 9,10,11,12,13,14,15,16};
+    cr_feed_frame(&inst, f0, sizeof(f0));
+    cr_feed_frame(&inst, f1, sizeof(f1));
+
+    /* 重复帧1 */
+    cr_feed_frame(&inst, f1, sizeof(f1));
+
+    /* 发末帧验证数据正确 */
+    recv_called = 0;
+    uint8_t f2[] = {0x02, 0x01, 0x30, 0x02, 0x03, 17,18,19,20};
+    cr_feed_frame(&inst, f2, sizeof(f2));
+    TEST_ASSERT_EQUAL_INT(1, recv_called);
+    TEST_ASSERT_EQUAL_UINT16(20, recv_len);
+}

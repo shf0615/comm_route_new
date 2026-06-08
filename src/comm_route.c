@@ -230,6 +230,17 @@ static void cr_send_frame(cr_internal_t *self, cr_tx_task_t *task) {
 void cr_poll(cr_instance_t *inst) {
     cr_internal_t *self = CR_GET_INTERNAL(inst);
 
+    /* Check RX assembly timeouts */
+    if (self->cfg.rx_assem_timeout_ms > 0) {
+        uint32_t now = self->hal->get_tick_ms();
+        for (uint8_t i = 0; i < self->cfg.rx_assem_count; i++) {
+            if (self->rx_slots[i].active &&
+                (now - self->rx_slots[i].last_active_tick) >= self->cfg.rx_assem_timeout_ms) {
+                self->rx_slots[i].active = 0;
+            }
+        }
+    }
+
     /* Process broadcast slot (independent of unicast) */
     if (self->bcast_pending) {
         cr_send_frame(self, &self->bcast_task);
