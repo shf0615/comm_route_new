@@ -25,3 +25,18 @@ void test_create_instance_with_static_buffer(void) {
     int ret = cr_init(&inst, &cfg, buffer, sizeof(buffer));
     TEST_ASSERT_EQUAL_INT(0, ret);
 }
+
+void test_init_fails_with_insufficient_buffer(void) {
+    uint8_t buffer[32];
+    cr_config_t cfg = {
+        .local_addr = 0x01,
+        .mtu = 64,
+        .tx_queue_depth = 4,
+        .rx_assem_count = 2,
+        .dedup_table_size = 16,
+        .rx_buf_per_slot = 256,
+    };
+    cr_instance_t inst;
+    int ret = cr_init(&inst, &cfg, buffer, sizeof(buffer));
+    TEST_ASSERT_EQUAL_INT(-3, ret);
+}
