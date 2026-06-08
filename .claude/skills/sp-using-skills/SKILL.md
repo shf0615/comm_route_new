@@ -40,18 +40,19 @@ debugging — 根因调查 → TDD 修复
 
 ## 技能列表
 
-| 技能 | 触发条件 |
-|------|---------|
-| `sp-brainstorming` | 新功能、新需求 |
-| `sp-writing-plans` | 有行为规格，准备规划 |
-| `sp-executing-plans` | 有计划，准备执行 |
-| `sp-dispatching-agents` | 2+ 独立任务可并行 |
-| `sp-review` | 实现完成，需验收 |
-| `sp-optimization` | 优化现有代码 |
-| `sp-testing` | 全面测试 |
-| `sp-debugging` | bug、测试失败、意外行为 |
-| `sp-finishing` | 审查通过，准备集成 |
-| `sp-git-worktrees` | 需要隔离工作空间 |
+| 技能 | 触发条件 | 使用方式 |
+|------|---------|---------|
+| `sp-brainstorming` | 新功能、新需求 | 主链条入口 |
+| `sp-writing-plans` | 有行为规格，准备规划 | 主链条 |
+| `sp-executing-plans` | 有计划，准备执行 | 主链条 |
+| `sp-dispatching-agents` | 2+ 独立任务可并行 | 被其他技能内部调用（executing-plans、optimization、testing 等需要并行派遣时） |
+| `sp-adversarial-review` | 阶段产物需要质量把关 | 被其他技能内部调用（brainstorming、writing-plans 内嵌的对抗性审查门） |
+| `sp-review` | 实现完成，需验收 | 主链条 |
+| `sp-optimization` | 优化现有代码 | 独立链条 |
+| `sp-testing` | 全面测试 | 独立链条 |
+| `sp-debugging` | bug、测试失败、意外行为 | 独立链条 |
+| `sp-finishing` | 审查通过，准备集成 | 主链条末尾 |
+| `sp-git-worktrees` | 需要隔离工作空间 | 主链条（executing-plans 前） |
 
 ## 技能优先级
 

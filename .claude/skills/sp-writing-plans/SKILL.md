@@ -44,12 +44,17 @@ description: 基于行为规格生成 TDD 实现计划。每个步骤遵循 Red-
 
 ## Scenario → Task 映射
 
-每个 Scenario（或 Scenario Outline）= 一个 Task。顺序：
+每个 Scenario（或 Scenario Outline）= 一个 Task。
+
+**排序原则：按增量复杂度排列，每个 Task 在前一个基础上增加一点行为。**
+
 1. **Task 0: 项目脚手架**（如需要）
 2. 基础设施/共用代码（Background 相关）
-3. 正常路径 Scenarios
-4. 异常路径 Scenarios
-5. 参数化 Scenarios（Outline）
+3. 后续 Task 按增量复杂度排列：
+   - 最简 happy path 先行
+   - 同一行为的参数化扩展（Outline）紧跟其对应的 Scenario
+   - 异常路径在核心逻辑稳固后加入
+   - 越复杂/越边界的越靠后
 
 ## Task 0: 项目脚手架
 
