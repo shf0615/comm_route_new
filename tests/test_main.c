@@ -14,6 +14,7 @@ extern void test_ack_timeout_retransmit(void);
 extern void test_ack_max_retries_fail(void);
 extern void test_receiver_auto_sends_ack(void);
 extern void test_ack_interrupt_mode(void);
+extern void test_multihop_ack_routing(void);
 extern void test_broadcast_single_frame(void);
 extern void test_broadcast_exceeds_mtu(void);
 extern void test_receive_broadcast_and_forward(void);
@@ -43,6 +44,7 @@ int main(void) {
     RUN_TEST(test_ack_max_retries_fail);
     RUN_TEST(test_receiver_auto_sends_ack);
     RUN_TEST(test_ack_interrupt_mode);
+    RUN_TEST(test_multihop_ack_routing);
     RUN_TEST(test_broadcast_single_frame);
     RUN_TEST(test_broadcast_exceeds_mtu);
     RUN_TEST(test_receive_broadcast_and_forward);
