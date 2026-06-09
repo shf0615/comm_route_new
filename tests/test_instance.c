@@ -19,7 +19,7 @@ void test_create_instance_with_static_buffer(void) {
         .dedup_table_size = 16,
         .rx_assem_timeout_ms = 1000,
         .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256,
+        .pool_size = 32,
         .bcast_queue_depth = 4,
         .route_table = NULL,
         .route_count = 0,
@@ -38,7 +38,7 @@ void test_init_fails_with_insufficient_buffer(void) {
         .rx_assem_count = 2,
         .dedup_table_size = 16,
         .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256,
+        .pool_size = 32,
         .bcast_queue_depth = 4,
     };
     cr_instance_t inst;
@@ -55,13 +55,13 @@ static uint32_t dummy_tick(void) { return 0; }
 void test_multi_instance_isolation(void) {
     uint8_t buf_a[4096], buf_b[2048];
     cr_config_t cfg = {
-        .local_addr = 0x01, .mtu = 8, .tx_queue_depth = 2,
+        .local_addr = 0x01, .mtu = 13, .tx_queue_depth = 2,
         .rx_assem_count = 1, .dedup_table_size = 8,
         .frame_interval_ms = 0, .max_retries = 3,
         .ack_timeout_ms = 100, .ack_enabled = 0,
         .ack_mode = CR_ACK_MODE_REPLY, .default_ttl = 3,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 128,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cr_instance_t inst_a, inst_b;
@@ -92,7 +92,7 @@ void test_calc_buffer_size(void) {
         .mtu = 64, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 16,
         .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256,
+        .pool_size = 32,
         .bcast_queue_depth = 4,
     };
     size_t size = cr_calc_buffer_size(&cfg);

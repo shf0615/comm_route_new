@@ -118,12 +118,12 @@ static void node_init(node_t *n, uint8_t addr, const char *name, const char *col
     memset(n, 0, sizeof(*n));
     n->addr = addr; n->name = name; n->color = color;
     cr_config_t cfg = {
-        .local_addr = addr, .mtu = 16, .frame_interval_ms = 10,
+        .local_addr = addr, .mtu = 21, .frame_interval_ms = 10,
         .max_retries = 3, .ack_timeout_ms = 200, .ack_enabled = 1,
         .ack_mode = CR_ACK_MODE_REPLY, .default_ttl = 4,
         .tx_queue_depth = 8, .rx_assem_count = 4, .dedup_table_size = 16,
         .rx_assem_timeout_ms = 5000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = rt, .route_count = rc,
     };
     cr_init(&n->inst, &cfg, n->buf, sizeof(n->buf));

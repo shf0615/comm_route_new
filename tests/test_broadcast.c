@@ -25,7 +25,7 @@ void test_broadcast_single_frame(void) {
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 16,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cr_instance_t inst;
@@ -53,12 +53,12 @@ void test_broadcast_single_frame(void) {
 void test_broadcast_exceeds_mtu(void) {
     uint8_t buffer[4096];
     cr_config_t cfg = {
-        .local_addr = 0x01, .mtu = 8, .frame_interval_ms = 0,
+        .local_addr = 0x01, .mtu = 13, .frame_interval_ms = 0,
         .ack_enabled = 0, .ack_mode = CR_ACK_MODE_REPLY,
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 16,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cr_instance_t inst;
@@ -111,7 +111,7 @@ static void setup_bcast_instance(uint8_t addr) {
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 16,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cr_init(&inst_b, &cfg, buf_b, sizeof(buf_b));
@@ -170,12 +170,12 @@ void test_broadcast_dedup(void) {
 void test_broadcast_parallel_with_unicast(void) {
     uint8_t buffer[4096];
     cr_config_t cfg = {
-        .local_addr = 0x01, .mtu = 8, .frame_interval_ms = 0,
+        .local_addr = 0x01, .mtu = 13, .frame_interval_ms = 0,
         .ack_enabled = 0, .ack_mode = CR_ACK_MODE_REPLY,
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 16,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cr_instance_t inst_p;

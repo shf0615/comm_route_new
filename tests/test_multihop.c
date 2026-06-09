@@ -32,12 +32,12 @@ void test_multihop_ack_routing(void) {
     /* Node A (0x01) */
     uint8_t buf_a[4096];
     cr_route_entry_t routes_a[] = { {.dest = 0x03, .next_hop = 0x02} };
-    cr_config_t cfg_a = { .local_addr = 0x01, .mtu = 32, .frame_interval_ms = 0,
+    cr_config_t cfg_a = { .local_addr = 0x01, .mtu = 37, .frame_interval_ms = 0,
         .max_retries = 3, .ack_timeout_ms = 100, .ack_enabled = 1,
         .ack_mode = CR_ACK_MODE_REPLY, .default_ttl = 3,
         .tx_queue_depth = 4, .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = routes_a, .route_count = 1 };
     cr_instance_t inst_a;
     cr_init(&inst_a, &cfg_a, buf_a, sizeof(buf_a));
@@ -48,12 +48,12 @@ void test_multihop_ack_routing(void) {
     uint8_t buf_b[4096];
     cr_route_entry_t routes_b[] = { {.dest = 0x01, .next_hop = 0x01},
                                      {.dest = 0x03, .next_hop = 0x03} };
-    cr_config_t cfg_b = { .local_addr = 0x02, .mtu = 32, .frame_interval_ms = 0,
+    cr_config_t cfg_b = { .local_addr = 0x02, .mtu = 37, .frame_interval_ms = 0,
         .max_retries = 3, .ack_timeout_ms = 100, .ack_enabled = 1,
         .ack_mode = CR_ACK_MODE_REPLY, .default_ttl = 3,
         .tx_queue_depth = 4, .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = routes_b, .route_count = 2 };
     cr_instance_t inst_b;
     cr_init(&inst_b, &cfg_b, buf_b, sizeof(buf_b));
@@ -63,12 +63,12 @@ void test_multihop_ack_routing(void) {
     /* Node C (0x03) */
     uint8_t buf_c[4096];
     cr_route_entry_t routes_c[] = { {.dest = 0x01, .next_hop = 0x02} };
-    cr_config_t cfg_c = { .local_addr = 0x03, .mtu = 32, .frame_interval_ms = 0,
+    cr_config_t cfg_c = { .local_addr = 0x03, .mtu = 37, .frame_interval_ms = 0,
         .max_retries = 3, .ack_timeout_ms = 100, .ack_enabled = 1,
         .ack_mode = CR_ACK_MODE_REPLY, .default_ttl = 3,
         .tx_queue_depth = 4, .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = routes_c, .route_count = 1 };
     cr_instance_t inst_c;
     cr_init(&inst_c, &cfg_c, buf_c, sizeof(buf_c));

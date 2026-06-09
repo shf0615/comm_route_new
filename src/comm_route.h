@@ -18,7 +18,7 @@ typedef struct {
 
 typedef struct {
     uint8_t                 local_addr;
-    uint16_t                mtu;
+    uint16_t                mtu;            /* 帧总大小(含5字节头), 单帧最大payload = mtu - 5 */
     uint16_t                frame_interval_ms;
     uint8_t                 max_retries;
     uint16_t                ack_timeout_ms;
@@ -29,8 +29,8 @@ typedef struct {
     uint8_t                 rx_assem_count;
     uint8_t                 dedup_table_size;
     uint16_t                rx_assem_timeout_ms;
-    uint16_t                rx_buf_per_slot;
-    uint16_t                tx_buf_per_slot;    /* 每个TX槽位的最大payload字节数 */
+    uint16_t                rx_buf_per_slot;    /* 接收重组交付缓冲区大小(最大可接收完整消息长度) */
+    uint8_t                 pool_size;          /* 内存池 block 总数, 每 block = mtu 字节 */
     uint8_t                 bcast_queue_depth;  /* 广播队列深度 */
     const cr_route_entry_t *route_table;
     uint8_t                 route_count;

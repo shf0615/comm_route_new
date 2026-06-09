@@ -98,12 +98,12 @@ static void cov_setup(const cr_config_t *cfg) {
 /* [额外-边界] MTU=1 时的拆帧 */
 void test_boundary_mtu_one_segmentation(void) {
     cr_config_t cfg = {
-        .local_addr = 0x01, .mtu = 1, .frame_interval_ms = 0,
+        .local_addr = 0x01, .mtu = 6, .frame_interval_ms = 0,
         .ack_enabled = 0, .ack_mode = CR_ACK_MODE_REPLY,
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cov_reset();
@@ -151,7 +151,7 @@ void test_boundary_tx_queue_depth_one(void) {
         .default_ttl = 3, .tx_queue_depth = 1,
         .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cov_setup(&cfg);
@@ -176,7 +176,7 @@ void test_boundary_broadcast_ttl_zero_send(void) {
         .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cov_setup(&cfg);
@@ -202,7 +202,7 @@ void test_boundary_empty_route_table_send(void) {
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cov_setup(&cfg);
@@ -229,7 +229,7 @@ void test_boundary_rx_buf_exactly_fits(void) {
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 16,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cov_setup(&cfg);
@@ -255,7 +255,7 @@ void test_boundary_rx_buf_one_byte_short(void) {
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 15,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cov_setup(&cfg);
@@ -282,7 +282,7 @@ void test_error_hal_send_fail(void) {
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cov_setup(&cfg);
@@ -310,7 +310,7 @@ void test_error_feed_frame_null_data(void) {
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cov_setup(&cfg);
@@ -338,7 +338,7 @@ void test_error_poll_no_hal(void) {
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cr_instance_t inst;
@@ -364,7 +364,7 @@ void test_error_init_mtu_zero(void) {
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cr_instance_t inst;
@@ -381,7 +381,7 @@ void test_error_init_tx_queue_depth_zero(void) {
         .default_ttl = 3, .tx_queue_depth = 0,
         .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cr_instance_t inst;
@@ -398,7 +398,7 @@ void test_error_init_bcast_queue_depth_zero(void) {
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 0,
+        .pool_size = 32, .bcast_queue_depth = 0,
         .route_table = NULL, .route_count = 0,
     };
     cr_instance_t inst;
@@ -415,7 +415,7 @@ void test_error_init_dedup_table_size_zero(void) {
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 0,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cr_instance_t inst;
@@ -436,15 +436,15 @@ void test_safety_send_huge_len(void) {
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cov_setup(&cfg);
 
-    /* len=65535, exceeds tx_buf_per_slot=256 → should return -2 */
+    /* len=65535, needs many blocks → should return CR_ERR_POOL_FULL (-4) */
     uint8_t data = 0xAA;
     int ret = cr_send(&cov_inst, 0x02, 0, &data, 65535, NULL, NULL);
-    TEST_ASSERT_EQUAL_INT(-2, ret);
+    TEST_ASSERT_EQUAL_INT(-4, ret);  /* CR_ERR_POOL_FULL */
 }
 
 /* [额外-安全] 超大 len 值 cr_broadcast */
@@ -455,7 +455,7 @@ void test_safety_broadcast_huge_len(void) {
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cov_setup(&cfg);
@@ -474,7 +474,7 @@ void test_safety_forged_frame_invalid_ctl(void) {
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cov_setup(&cfg);
@@ -495,7 +495,7 @@ void test_safety_forged_unicast_to_broadcast_addr(void) {
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cov_setup(&cfg);
@@ -514,12 +514,12 @@ void test_safety_forged_unicast_to_broadcast_addr(void) {
 void test_safety_rx_frame_payload_exceeds_mtu(void) {
     cr_route_entry_t routes[] = { {.dest = 0x03, .next_hop = 0x03} };
     cr_config_t cfg = {
-        .local_addr = 0x02, .mtu = 8, .frame_interval_ms = 0,
+        .local_addr = 0x02, .mtu = 13, .frame_interval_ms = 0,
         .ack_enabled = 0, .ack_mode = CR_ACK_MODE_REPLY,
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = routes, .route_count = 1,
     };
     cov_setup(&cfg);
@@ -537,12 +537,12 @@ void test_safety_rx_frame_payload_exceeds_mtu(void) {
 /* [额外-安全] 接收广播帧 payload 超过 MTU → 不转发 */
 void test_safety_rx_broadcast_oversized_no_forward(void) {
     cr_config_t cfg = {
-        .local_addr = 0x02, .mtu = 4, .frame_interval_ms = 0,
+        .local_addr = 0x02, .mtu = 9, .frame_interval_ms = 0,
         .ack_enabled = 0, .ack_mode = CR_ACK_MODE_REPLY,
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cov_setup(&cfg);
@@ -571,7 +571,7 @@ void test_stress_fill_tx_queue(void) {
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cov_setup(&cfg);
@@ -608,7 +608,7 @@ void test_stress_multiple_rx_slots_active(void) {
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 4, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 5000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cov_setup(&cfg);
@@ -669,12 +669,12 @@ void test_e2e_three_node_chain_long_data(void) {
     /* Node A (0x01): sender */
     uint8_t bufA[8192];
     cr_route_entry_t rA[] = { {.dest = 0x03, .next_hop = 0x02} };
-    cr_config_t cfgA = { .local_addr = 0x01, .mtu = 8, .frame_interval_ms = 0,
+    cr_config_t cfgA = { .local_addr = 0x01, .mtu = 13, .frame_interval_ms = 0,
         .max_retries = 3, .ack_timeout_ms = 100, .ack_enabled = 1,
         .ack_mode = CR_ACK_MODE_REPLY, .default_ttl = 3,
         .tx_queue_depth = 4, .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = rA, .route_count = 1 };
     cr_instance_t instA;
     cr_init(&instA, &cfgA, bufA, sizeof(bufA));
@@ -684,12 +684,12 @@ void test_e2e_three_node_chain_long_data(void) {
     /* Node B (0x02): relay */
     uint8_t bufB[8192];
     cr_route_entry_t rB[] = { {.dest = 0x01, .next_hop = 0x01}, {.dest = 0x03, .next_hop = 0x03} };
-    cr_config_t cfgB = { .local_addr = 0x02, .mtu = 8, .frame_interval_ms = 0,
+    cr_config_t cfgB = { .local_addr = 0x02, .mtu = 13, .frame_interval_ms = 0,
         .max_retries = 3, .ack_timeout_ms = 100, .ack_enabled = 1,
         .ack_mode = CR_ACK_MODE_REPLY, .default_ttl = 3,
         .tx_queue_depth = 4, .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = rB, .route_count = 2 };
     cr_instance_t instB;
     cr_init(&instB, &cfgB, bufB, sizeof(bufB));
@@ -699,12 +699,12 @@ void test_e2e_three_node_chain_long_data(void) {
     /* Node C (0x03): receiver */
     uint8_t bufC[8192];
     cr_route_entry_t rC[] = { {.dest = 0x01, .next_hop = 0x02} };
-    cr_config_t cfgC = { .local_addr = 0x03, .mtu = 8, .frame_interval_ms = 0,
+    cr_config_t cfgC = { .local_addr = 0x03, .mtu = 13, .frame_interval_ms = 0,
         .max_retries = 3, .ack_timeout_ms = 100, .ack_enabled = 1,
         .ack_mode = CR_ACK_MODE_REPLY, .default_ttl = 3,
         .tx_queue_depth = 4, .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = rC, .route_count = 1 };
     cr_instance_t instC;
     cr_init(&instC, &cfgC, bufC, sizeof(bufC));
@@ -784,7 +784,7 @@ void test_e2e_broadcast_flood_and_dedup(void) {
         .ack_enabled = 0, .ack_mode = CR_ACK_MODE_REPLY, .default_ttl = 2,
         .tx_queue_depth = 4, .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0 };
     cr_instance_t instA;
     cr_init(&instA, &cfgA, bufA, sizeof(bufA));
@@ -797,7 +797,7 @@ void test_e2e_broadcast_flood_and_dedup(void) {
         .ack_enabled = 0, .ack_mode = CR_ACK_MODE_REPLY, .default_ttl = 2,
         .tx_queue_depth = 4, .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0 };
     cr_instance_t instB;
     cr_init(&instB, &cfgB, bufB, sizeof(bufB));
@@ -813,7 +813,7 @@ void test_e2e_broadcast_flood_and_dedup(void) {
         .ack_enabled = 0, .ack_mode = CR_ACK_MODE_REPLY, .default_ttl = 2,
         .tx_queue_depth = 4, .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0 };
     cr_instance_t instC;
     cr_init(&instC, &cfgC, bufC, sizeof(bufC));
@@ -864,7 +864,7 @@ void test_stress_seq_wrap_with_ack(void) {
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = routes, .route_count = 1,
     };
     cov_setup(&cfg);
@@ -912,7 +912,7 @@ void test_boundary_calc_buffer_size_mtu_zero(void) {
     cr_config_t cfg = {
         .local_addr = 0x01, .mtu = 0, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 8,
-        .rx_buf_per_slot = 256, .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .rx_buf_per_slot = 256, .pool_size = 32, .bcast_queue_depth = 4,
     };
     size_t size = cr_calc_buffer_size(&cfg);
     TEST_ASSERT_EQUAL_INT(0, size);
@@ -927,13 +927,13 @@ void test_boundary_calc_buffer_size_null(void) {
 /* [额外-异常] 长数据 ACK 中一帧失败导致整个长数据失败 */
 void test_error_long_data_ack_fail_whole_task(void) {
     cr_config_t cfg = {
-        .local_addr = 0x01, .mtu = 8, .frame_interval_ms = 0,
+        .local_addr = 0x01, .mtu = 13, .frame_interval_ms = 0,
         .max_retries = 1, .ack_timeout_ms = 50,
         .ack_enabled = 1, .ack_mode = CR_ACK_MODE_REPLY,
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cov_setup(&cfg);
@@ -968,7 +968,7 @@ void test_boundary_biz_id_propagation(void) {
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cov_setup(&cfg);
@@ -989,7 +989,7 @@ void test_safety_send_null_data_nonzero_len(void) {
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cov_setup(&cfg);
@@ -1006,7 +1006,7 @@ void test_safety_broadcast_null_data_nonzero_len(void) {
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cov_setup(&cfg);
@@ -1057,7 +1057,7 @@ void test_unicast_forward_ttl_not_decremented(void) {
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = routes, .route_count = 1,
     };
     cov_setup(&cfg);
@@ -1079,13 +1079,13 @@ void test_unicast_forward_ttl_not_decremented(void) {
  * 最终触发完成回调 */
 void test_interrupt_mode_long_data_multi_frame(void) {
     cr_config_t cfg = {
-        .local_addr = 0x01, .mtu = 8, .frame_interval_ms = 0,
+        .local_addr = 0x01, .mtu = 13, .frame_interval_ms = 0,
         .max_retries = 3, .ack_timeout_ms = 100,
         .ack_enabled = 1, .ack_mode = CR_ACK_MODE_INTERRUPT,
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cov_setup(&cfg);

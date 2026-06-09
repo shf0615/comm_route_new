@@ -44,7 +44,7 @@ static void setup_instance(uint8_t addr, const cr_route_entry_t *routes, uint8_t
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 16,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = routes, .route_count = route_count,
     };
     cr_init(&inst, &cfg, buffer, sizeof(buffer));

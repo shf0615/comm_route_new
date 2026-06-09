@@ -57,7 +57,7 @@ extern void test_send_deep_copy(void);
 extern void test_broadcast_deep_copy(void);
 extern void test_broadcast_queue_multiple(void);
 extern void test_broadcast_queue_full(void);
-extern void test_send_exceeds_tx_buf(void);
+extern void test_send_exceeds_pool(void);
 
 /* test_coverage.c */
 extern void test_boundary_mtu_one_segmentation(void);
@@ -158,7 +158,7 @@ int main(void) {
     RUN_TEST(test_broadcast_deep_copy);
     RUN_TEST(test_broadcast_queue_multiple);
     RUN_TEST(test_broadcast_queue_full);
-    RUN_TEST(test_send_exceeds_tx_buf);
+    RUN_TEST(test_send_exceeds_pool);
     /* test_coverage.c */
     RUN_TEST(test_boundary_mtu_one_segmentation);
     RUN_TEST(test_boundary_tx_queue_depth_one);

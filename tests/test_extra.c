@@ -78,7 +78,7 @@ static void ex_setup(uint8_t addr, uint16_t mtu, uint8_t ack_enabled,
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = routes, .route_count = route_count,
     };
     cr_init(&ex_inst, &cfg, ex_buffer, sizeof(ex_buffer));
@@ -130,7 +130,7 @@ void test_broadcast_zero_length(void) {
 }
 
 void test_send_exactly_mtu(void) {
-    ex_setup(0x01, 8, 0, CR_ACK_MODE_REPLY, NULL, 0);
+    ex_setup(0x01, 13, 0, CR_ACK_MODE_REPLY, NULL, 0);
     ex_hal.send = ex_mock_send_history;
     cr_set_hal(&ex_inst, &ex_hal);
 
@@ -146,7 +146,7 @@ void test_send_exactly_mtu(void) {
 }
 
 void test_send_mtu_plus_one(void) {
-    ex_setup(0x01, 8, 0, CR_ACK_MODE_REPLY, NULL, 0);
+    ex_setup(0x01, 13, 0, CR_ACK_MODE_REPLY, NULL, 0);
     ex_hal.send = ex_mock_send_history;
     cr_set_hal(&ex_inst, &ex_hal);
 
@@ -275,7 +275,7 @@ void test_feed_frame_no_hal_set(void) {
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cr_instance_t inst_no_hal;
@@ -327,7 +327,7 @@ void test_init_null_instance(void) {
         .local_addr = 0x01, .mtu = 64, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
     };
     uint8_t buf[4096];
     int ret = cr_init(NULL, &cfg, buf, sizeof(buf));
@@ -347,7 +347,7 @@ void test_init_null_buffer(void) {
         .local_addr = 0x01, .mtu = 64, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
     };
     int ret = cr_init(&inst, &cfg, NULL, 1024);
     TEST_ASSERT_EQUAL_INT(-2, ret);
@@ -362,7 +362,7 @@ void test_broadcast_busy_returns_error(void) {
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 1,
+        .pool_size = 32, .bcast_queue_depth = 1,
         .route_table = NULL, .route_count = 0,
     };
     cr_init(&ex_inst, &cfg, ex_buffer, sizeof(ex_buffer));
@@ -391,7 +391,7 @@ void test_rx_buffer_overflow_drops_slot(void) {
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 10, /* only 10 bytes! */
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cr_instance_t inst;
@@ -450,12 +450,12 @@ void test_multihop_intermediate_no_consume_ack(void) {
     /* Node A */
     uint8_t bufA[4096];
     cr_route_entry_t rA[] = { {.dest = 0x03, .next_hop = 0x02} };
-    cr_config_t cfgA = { .local_addr = 0x01, .mtu = 32, .frame_interval_ms = 0,
+    cr_config_t cfgA = { .local_addr = 0x01, .mtu = 37, .frame_interval_ms = 0,
         .max_retries = 3, .ack_timeout_ms = 100, .ack_enabled = 1,
         .ack_mode = CR_ACK_MODE_REPLY, .default_ttl = 3,
         .tx_queue_depth = 4, .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = rA, .route_count = 1 };
     cr_instance_t instA;
     cr_init(&instA, &cfgA, bufA, sizeof(bufA));
@@ -465,12 +465,12 @@ void test_multihop_intermediate_no_consume_ack(void) {
     /* Node B (intermediate) */
     uint8_t bufB[4096];
     cr_route_entry_t rB[] = { {.dest = 0x01, .next_hop = 0x01}, {.dest = 0x03, .next_hop = 0x03} };
-    cr_config_t cfgB = { .local_addr = 0x02, .mtu = 32, .frame_interval_ms = 0,
+    cr_config_t cfgB = { .local_addr = 0x02, .mtu = 37, .frame_interval_ms = 0,
         .max_retries = 3, .ack_timeout_ms = 100, .ack_enabled = 1,
         .ack_mode = CR_ACK_MODE_REPLY, .default_ttl = 3,
         .tx_queue_depth = 4, .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = rB, .route_count = 2 };
     cr_instance_t instB;
     cr_init(&instB, &cfgB, bufB, sizeof(bufB));
@@ -480,12 +480,12 @@ void test_multihop_intermediate_no_consume_ack(void) {
     /* Node C (receiver) */
     uint8_t bufC[4096];
     cr_route_entry_t rC[] = { {.dest = 0x01, .next_hop = 0x02} };
-    cr_config_t cfgC = { .local_addr = 0x03, .mtu = 32, .frame_interval_ms = 0,
+    cr_config_t cfgC = { .local_addr = 0x03, .mtu = 37, .frame_interval_ms = 0,
         .max_retries = 3, .ack_timeout_ms = 100, .ack_enabled = 1,
         .ack_mode = CR_ACK_MODE_REPLY, .default_ttl = 3,
         .tx_queue_depth = 4, .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = rC, .route_count = 1 };
     cr_instance_t instC;
     cr_init(&instC, &cfgC, bufC, sizeof(bufC));
@@ -537,11 +537,11 @@ void test_star_topology_routing(void) {
         {.dest = 0x03, .next_hop = 0x03},
         {.dest = 0x04, .next_hop = 0x04},
     };
-    cr_config_t cfgCenter = { .local_addr = 0x01, .mtu = 32, .frame_interval_ms = 0,
+    cr_config_t cfgCenter = { .local_addr = 0x01, .mtu = 37, .frame_interval_ms = 0,
         .ack_enabled = 0, .ack_mode = CR_ACK_MODE_REPLY, .default_ttl = 3,
         .tx_queue_depth = 4, .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = rCenter, .route_count = 3 };
     cr_instance_t instCenter;
     cr_init(&instCenter, &cfgCenter, bufCenter, sizeof(bufCenter));
@@ -551,11 +551,11 @@ void test_star_topology_routing(void) {
     /* Endpoint 0x02 sends data to 0x04 */
     uint8_t bufE2[4096];
     cr_route_entry_t rE2[] = { {.dest = 0x04, .next_hop = 0x01} }; /* via center */
-    cr_config_t cfgE2 = { .local_addr = 0x02, .mtu = 32, .frame_interval_ms = 0,
+    cr_config_t cfgE2 = { .local_addr = 0x02, .mtu = 37, .frame_interval_ms = 0,
         .ack_enabled = 0, .ack_mode = CR_ACK_MODE_REPLY, .default_ttl = 3,
         .tx_queue_depth = 4, .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = rE2, .route_count = 1 };
     cr_instance_t instE2;
     cr_init(&instE2, &cfgE2, bufE2, sizeof(bufE2));
@@ -565,11 +565,11 @@ void test_star_topology_routing(void) {
     /* Endpoint 0x04 receives */
     uint8_t bufE4[4096];
     cr_route_entry_t rE4[] = { {.dest = 0x02, .next_hop = 0x01} };
-    cr_config_t cfgE4 = { .local_addr = 0x04, .mtu = 32, .frame_interval_ms = 0,
+    cr_config_t cfgE4 = { .local_addr = 0x04, .mtu = 37, .frame_interval_ms = 0,
         .ack_enabled = 0, .ack_mode = CR_ACK_MODE_REPLY, .default_ttl = 3,
         .tx_queue_depth = 4, .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = rE4, .route_count = 1 };
     cr_instance_t instE4;
     cr_init(&instE4, &cfgE4, bufE4, sizeof(bufE4));
@@ -607,7 +607,7 @@ void test_dedup_table_ring_overwrite(void) {
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 4,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 4,
+        .pool_size = 32, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cr_instance_t inst;
@@ -722,7 +722,7 @@ void test_broadcast_queue_full(void) {
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 256, .bcast_queue_depth = 2,
+        .pool_size = 32, .bcast_queue_depth = 2,
         .route_table = NULL, .route_count = 0,
     };
     cr_init(&ex_inst, &cfg, ex_buffer, sizeof(ex_buffer));
@@ -740,8 +740,9 @@ void test_broadcast_queue_full(void) {
     TEST_ASSERT_EQUAL_INT(-1, cr_broadcast(&ex_inst, 0, data, 3));
 }
 
-void test_send_exceeds_tx_buf(void) {
-    /* tx_buf_per_slot=10 */
+void test_send_exceeds_pool(void) {
+    /* pool_size=2, mtu=64 → only 1 usable block (1 reserved for scratch).
+     * Sending 120 bytes needs ceil(120/59)=3 blocks → pool full */
     cr_config_t cfg = {
         .local_addr = 0x01, .mtu = 64, .frame_interval_ms = 0,
         .max_retries = 3, .ack_timeout_ms = 100,
@@ -749,7 +750,7 @@ void test_send_exceeds_tx_buf(void) {
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 8,
         .rx_assem_timeout_ms = 1000, .rx_buf_per_slot = 256,
-        .tx_buf_per_slot = 10, .bcast_queue_depth = 4,
+        .pool_size = 2, .bcast_queue_depth = 4,
         .route_table = NULL, .route_count = 0,
     };
     cr_init(&ex_inst, &cfg, ex_buffer, sizeof(ex_buffer));
@@ -760,7 +761,7 @@ void test_send_exceeds_tx_buf(void) {
     ex_mock_tick = 0;
     ex_send_count = 0;
 
-    uint8_t data[20] = {0};
-    int ret = cr_send(&ex_inst, 0x02, 0, data, 20, NULL, NULL);
-    TEST_ASSERT_EQUAL_INT(-2, ret);
+    uint8_t data[120] = {0};
+    int ret = cr_send(&ex_inst, 0x02, 0, data, 120, NULL, NULL);
+    TEST_ASSERT_EQUAL_INT(-4, ret);  /* CR_ERR_POOL_FULL */
 }
