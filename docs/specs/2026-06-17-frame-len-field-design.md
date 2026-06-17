@@ -64,6 +64,9 @@ ACK 帧数组大小改为 `CR_FRAME_HEADER_SIZE`（6字节），添加 `ack_fram
 uint16_t payload_len = len - CR_FRAME_HEADER_SIZE;
 // 修改后
 uint16_t payload_len = data[5];
+if (CR_FRAME_HEADER_SIZE + payload_len > len) {
+    return; /* LEN 声称的长度超过帧实际大小，丢弃 */
+}
 ```
 
 payload 指针 `&data[CR_FRAME_HEADER_SIZE]` 自动适应。

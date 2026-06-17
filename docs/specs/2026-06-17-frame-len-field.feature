@@ -43,3 +43,9 @@ Feature: 帧格式有效数据长度字段
     Given 实例配置本机地址=0x02
     When 收到一帧（frame[5]=0, 非ACK帧）
     Then 回调交付的数据长度为 0
+
+  Scenario: LEN 超过帧实际大小 - 丢弃帧
+    Given 实例配置本机地址=0x02
+    When 收到一帧（底层传入总长=10, frame[5]=100）
+    Then 实例丢弃该帧（LEN 声称 100 字节但帧仅 10 字节）
+    And 不触发接收回调
