@@ -619,6 +619,10 @@ static void cr_handle_local_frame(cr_internal_t *self, cr_instance_t *inst,
     const uint8_t *payload = &data[CR_FRAME_HEADER_SIZE];
     uint16_t payload_len = data[5];  /* LEN field */
 
+    if (CR_FRAME_HEADER_SIZE + payload_len > len) {
+        return; /* LEN exceeds actual frame size, drop */
+    }
+
     uint8_t is_ack = CR_CTL_IS_ACK(ctl) ? 1 : 0;
     if (is_ack) {
         /* Match active unicast task by SEQ */
@@ -754,6 +758,10 @@ static void cr_handle_broadcast_frame(cr_internal_t *self, cr_instance_t *inst,
     uint16_t payload_len = data[5];  /* LEN field */
     uint8_t seq = data[3];
     uint8_t ttl = data[4];
+
+    if (CR_FRAME_HEADER_SIZE + payload_len > len) {
+        return; /* LEN exceeds actual frame size, drop */
+    }
 
     /* Dedup check */
     for (uint8_t i = 0; i < self->cfg.dedup_table_size; i++) {

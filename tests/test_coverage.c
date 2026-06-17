@@ -613,16 +613,16 @@ void test_stress_multiple_rx_slots_active(void) {
     };
     cov_setup(&cfg);
 
-    /* Start assembly from 4 different sources simultaneously */
+    /* Start assembly from 4 different sources simultaneously, LEN=1 */
     for (uint8_t i = 0; i < 4; i++) {
-        uint8_t f[] = {0x02, (uint8_t)(0x10 + i), 0x20, 0x00, 0x03, (uint8_t)(i * 10)};
+        uint8_t f[] = {0x02, (uint8_t)(0x10 + i), 0x20, 0x00, 0x03, 0x01, (uint8_t)(i * 10)};
         cr_feed_frame(&cov_inst, f, sizeof(f));
     }
     TEST_ASSERT_EQUAL_INT(0, cov_recv_called); /* all pending */
 
-    /* Complete all 4 with their second (last) fragments */
+    /* Complete all 4 with their second (last) fragments, LEN=1 */
     for (uint8_t i = 0; i < 4; i++) {
-        uint8_t f[] = {0x02, (uint8_t)(0x10 + i), 0x30, 0x01, 0x03, (uint8_t)(i * 10 + 1)};
+        uint8_t f[] = {0x02, (uint8_t)(0x10 + i), 0x30, 0x01, 0x03, 0x01, (uint8_t)(i * 10 + 1)};
         cr_feed_frame(&cov_inst, f, sizeof(f));
     }
     TEST_ASSERT_EQUAL_INT(4, cov_recv_called);

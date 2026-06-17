@@ -104,6 +104,10 @@ extern void test_ack_frame_len_zero(void);
 extern void test_broadcast_fills_len_field(void);
 extern void test_rx_uses_len_field(void);
 extern void test_rx_len_zero_data_frame(void);
+extern void test_rx_len_overflow_drops_frame(void);
+extern void test_rx_len_overflow_broadcast_drops(void);
+extern void test_tx_multiframe_each_fills_len(void);
+extern void test_rx_multiframe_assembly_uses_len(void);
 
 void setUp(void) {}
 void tearDown(void) {}
@@ -210,5 +214,9 @@ int main(void) {
     RUN_TEST(test_broadcast_fills_len_field);
     RUN_TEST(test_rx_uses_len_field);
     RUN_TEST(test_rx_len_zero_data_frame);
+    RUN_TEST(test_rx_len_overflow_drops_frame);
+    RUN_TEST(test_rx_len_overflow_broadcast_drops);
+    RUN_TEST(test_tx_multiframe_each_fills_len);
+    RUN_TEST(test_rx_multiframe_assembly_uses_len);
     return UNITY_END();
 }

@@ -632,8 +632,8 @@ void test_dedup_table_ring_overwrite(void) {
     cr_feed_frame(&inst, dup_frame, sizeof(dup_frame));
     TEST_ASSERT_EQUAL_INT(0, ex_recv_called); /* still deduped */
 
-    /* Send a 5th unique broadcast (overwrites slot[0] which held src=0x10,seq=0) */
-    uint8_t frame5[] = {0xFF, 0x20, 0x40, 0x00, 0x00, 0xBB};
+    /* Send a 5th unique broadcast (overwrites slot[0] which held src=0x10,seq=0), LEN=1 */
+    uint8_t frame5[] = {0xFF, 0x20, 0x40, 0x00, 0x00, 0x01, 0xBB};
     cr_feed_frame(&inst, frame5, sizeof(frame5));
     TEST_ASSERT_EQUAL_INT(1, ex_recv_called); /* new, delivered */
 
