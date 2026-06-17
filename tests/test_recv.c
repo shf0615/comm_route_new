@@ -138,12 +138,15 @@ void test_rx_assembly_timeout(void) {
     mock_tick = 1100; /* rx_assem_timeout_ms=1000 */
     cr_poll(&inst);
 
-    /* 帧2(末帧)到达——槽已释放，应该不触发回调 */
+    /* 帧2(末帧)到达——槽已释放，会被当作新长数据的首帧(FRAG+LAST=单帧多帧)
+     * 新行为：分配新 slot, expected_seq=2, SEQ=2 匹配 + LAST → 交付 4 字节
+     * 验证重点：之前组装的帧0+帧1数据已丢失，不会交付 20 字节完整数据 */
     recv_called = 0;
     uint8_t f2[] = {0x02, 0x01, 0x30, 0x02, 0x03, 0x04, 17,18,19,20};
     cr_feed_frame(&inst, f2, sizeof(f2));
-    /* SEQ=2 但无活跃槽（已释放），无法匹配，不触发 */
-    TEST_ASSERT_EQUAL_INT(0, recv_called);
+    /* 孤立末帧被当作新的单帧长数据交付（只含 4 字节），而非之前的 20 字节 */
+    TEST_ASSERT_EQUAL_INT(1, recv_called);
+    TEST_ASSERT_EQUAL_UINT16(4, recv_len);
 }
 
 void test_rx_slot_full_drops_new(void) {

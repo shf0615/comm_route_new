@@ -569,7 +569,7 @@ void cr_poll(cr_instance_t *inst) {
 /* Find existing RX slot for (src, biz_id) or allocate a new one.
  * Returns slot pointer. Returns NULL if no slot available. */
 static cr_rx_slot_t *cr_rx_find_or_alloc_slot(cr_internal_t *self, uint8_t src,
-                                              uint8_t biz_id) {
+                                              uint8_t biz_id, uint8_t seq) {
     /* Search for existing active slot matching src+biz_id */
     for (uint8_t i = 0; i < self->cfg.rx_assem_count; i++) {
         if (self->rx_slots[i].active &&
@@ -586,7 +586,7 @@ static cr_rx_slot_t *cr_rx_find_or_alloc_slot(cr_internal_t *self, uint8_t src,
             self->rx_active_count++;
             slot->src = src;
             slot->biz_id = biz_id;
-            slot->expected_seq = 0;
+            slot->expected_seq = seq;
             slot->received_len = 0;
             slot->head_block = CR_POOL_NONE;
             slot->tail_block = CR_POOL_NONE;
@@ -656,7 +656,7 @@ static void cr_handle_local_frame(cr_internal_t *self, cr_instance_t *inst,
         }
     } else {
         /* Multi-frame fragment — find or create RX assembly slot */
-        cr_rx_slot_t *slot = cr_rx_find_or_alloc_slot(self, src, biz_id);
+        cr_rx_slot_t *slot = cr_rx_find_or_alloc_slot(self, src, biz_id, seq);
 
         if (slot == NULL) {
             return; /* No free slot, drop */
