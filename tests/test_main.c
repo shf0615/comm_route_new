@@ -108,6 +108,19 @@ extern void test_rx_len_overflow_drops_frame(void);
 extern void test_rx_len_overflow_broadcast_drops(void);
 extern void test_tx_multiframe_each_fills_len(void);
 extern void test_rx_multiframe_assembly_uses_len(void);
+/* test_len_field.c - 额外测试 */
+extern void test_len_field_max_255(void);
+extern void test_len_field_exactly_fills_frame(void);
+extern void test_rx_len_zero_ignores_trailing_data(void);
+extern void test_rx_broadcast_len_exceeds_actual_drops(void);
+extern void test_security_forged_len_far_exceeds_mtu(void);
+extern void test_perf_100_frames_len_correct(void);
+extern void test_e2e_tx_rx_len_roundtrip(void);
+extern void test_e2e_multihop_forward_preserves_len(void);
+/* test_len_field.c - 补充测试 */
+extern void test_rx_multiframe_fragment_len_overflow(void);
+extern void test_forward_invalid_len_no_crash(void);
+extern void test_rx_forged_ack_len_overflow_drops(void);
 
 void setUp(void) {}
 void tearDown(void) {}
@@ -218,5 +231,18 @@ int main(void) {
     RUN_TEST(test_rx_len_overflow_broadcast_drops);
     RUN_TEST(test_tx_multiframe_each_fills_len);
     RUN_TEST(test_rx_multiframe_assembly_uses_len);
+    /* test_len_field.c - 额外测试 */
+    RUN_TEST(test_len_field_max_255);
+    RUN_TEST(test_len_field_exactly_fills_frame);
+    RUN_TEST(test_rx_len_zero_ignores_trailing_data);
+    RUN_TEST(test_rx_broadcast_len_exceeds_actual_drops);
+    RUN_TEST(test_security_forged_len_far_exceeds_mtu);
+    RUN_TEST(test_perf_100_frames_len_correct);
+    RUN_TEST(test_e2e_tx_rx_len_roundtrip);
+    RUN_TEST(test_e2e_multihop_forward_preserves_len);
+    /* test_len_field.c - 补充测试 */
+    RUN_TEST(test_rx_multiframe_fragment_len_overflow);
+    RUN_TEST(test_forward_invalid_len_no_crash);
+    RUN_TEST(test_rx_forged_ack_len_overflow_drops);
     return UNITY_END();
 }
