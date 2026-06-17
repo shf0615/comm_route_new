@@ -72,11 +72,11 @@ static int hal_send(void *ctx, uint8_t next_hop, const uint8_t *data, uint16_t l
     uint8_t dst = data[0];
     const char *tp = (ctl & 0x80) ? "ACK" : (ctl & 0x40) ? "BCAST" : (ctl & 0x20) ? "FRAG" : "DATA";
     printf("    %s[%s]%s TX %-5s dst=0x%02X seq=%d", s->color, s->name, RST, tp, dst, data[3]);
-    if (!(ctl & 0x80) && len > 5) {
+    if (!(ctl & 0x80) && len > 6) {
         printf(" \"");
-        for (uint16_t i = 5; i < len && i < 20; i++)
+        for (uint16_t i = 6; i < len && i < 21; i++)
             printf("%c", (data[i] >= 0x20 && data[i] <= 0x7E) ? data[i] : '.');
-        if (len > 20) printf("...");
+        if (len > 21) printf("...");
         printf("\"");
     }
     printf("\n");
