@@ -102,6 +102,8 @@ extern void test_interrupt_mode_long_data_multi_frame(void);
 extern void test_tx_fills_len_field(void);
 extern void test_ack_frame_len_zero(void);
 extern void test_broadcast_fills_len_field(void);
+extern void test_rx_uses_len_field(void);
+extern void test_rx_len_zero_data_frame(void);
 
 void setUp(void) {}
 void tearDown(void) {}
@@ -206,5 +208,7 @@ int main(void) {
     RUN_TEST(test_tx_fills_len_field);
     RUN_TEST(test_ack_frame_len_zero);
     RUN_TEST(test_broadcast_fills_len_field);
+    RUN_TEST(test_rx_uses_len_field);
+    RUN_TEST(test_rx_len_zero_data_frame);
     return UNITY_END();
 }

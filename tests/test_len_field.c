@@ -85,3 +85,56 @@ void test_broadcast_fills_len_field(void) {
     /* DST = 0xFF */
     TEST_ASSERT_EQUAL_UINT8(0xFF, sent_buf[0]);
 }
+
+/* ===== RX Tests ===== */
+
+static uint8_t recv_payload[256];
+static uint16_t recv_len;
+static int recv_count;
+
+static void mock_recv(cr_instance_t *i, uint8_t src, uint8_t biz_id,
+                      const uint8_t *data, uint16_t len, void *ctx) {
+    (void)i; (void)src; (void)biz_id; (void)ctx;
+    if (len > 0) memcpy(recv_payload, data, len);
+    recv_len = len;
+    recv_count++;
+}
+
+/* Scenario: 接收端根据 LEN 截取有效数据 */
+void test_rx_uses_len_field(void) {
+    setup_instance(0x02, 64, 0);
+    cr_set_recv_callback(&inst, mock_recv, NULL);
+    recv_count = 0;
+    recv_len = 0;
+
+    /* 构造 64 字节帧，LEN=5，后面填充垃圾 */
+    uint8_t frame[64];
+    memset(frame, 0xAA, sizeof(frame));  /* 填充 */
+    frame[0] = 0x02;  /* DST = 本机 */
+    frame[1] = 0x01;  /* SRC */
+    frame[2] = 0x00;  /* CTL */
+    frame[3] = 0x00;  /* SEQ */
+    frame[4] = 0x03;  /* TTL */
+    frame[5] = 5;     /* LEN = 5 */
+    memcpy(&frame[6], "HELLO", 5);
+
+    cr_feed_frame(&inst, frame, 64);  /* 底层传入总长 64 */
+
+    TEST_ASSERT_EQUAL_INT(1, recv_count);
+    TEST_ASSERT_EQUAL_UINT16(5, recv_len);  /* 应该是 5，不是 64-6=58 */
+    TEST_ASSERT_EQUAL_MEMORY("HELLO", recv_payload, 5);
+}
+
+/* Scenario: LEN=0 的数据帧 */
+void test_rx_len_zero_data_frame(void) {
+    setup_instance(0x02, 64, 0);
+    cr_set_recv_callback(&inst, mock_recv, NULL);
+    recv_count = 0;
+    recv_len = 0xFF;  /* 故意设非零 */
+
+    uint8_t frame[] = {0x02, 0x01, 0x00, 0x00, 0x03, 0x00};  /* LEN=0 */
+    cr_feed_frame(&inst, frame, sizeof(frame));
+
+    TEST_ASSERT_EQUAL_INT(1, recv_count);
+    TEST_ASSERT_EQUAL_UINT16(0, recv_len);
+}

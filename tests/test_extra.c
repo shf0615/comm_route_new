@@ -402,13 +402,13 @@ void test_rx_buffer_overflow_drops_slot(void) {
     cr_set_recv_callback(&inst, ex_mock_recv_cb, NULL);
     ex_recv_called = 0;
 
-    /* First frag: 8 bytes payload → fits in 10 */
-    uint8_t f0[] = {0x02, 0x01, 0x20, 0x00, 0x03, 1,2,3,4,5,6,7,8};
+    /* First frag: 8 bytes payload → fits in 10, LEN=8 */
+    uint8_t f0[] = {0x02, 0x01, 0x20, 0x00, 0x03, 0x08, 1,2,3,4,5,6,7,8};
     cr_feed_frame(&inst, f0, sizeof(f0));
     TEST_ASSERT_EQUAL_INT(0, ex_recv_called);
 
-    /* Second frag: 8 bytes → total would be 16, exceeds 10 → slot dropped */
-    uint8_t f1[] = {0x02, 0x01, 0x30, 0x01, 0x03, 9,10,11,12,13,14,15,16};
+    /* Second frag: 8 bytes → total would be 16, exceeds 10 → slot dropped, LEN=8 */
+    uint8_t f1[] = {0x02, 0x01, 0x30, 0x01, 0x03, 0x08, 9,10,11,12,13,14,15,16};
     cr_feed_frame(&inst, f1, sizeof(f1));
 
     /* Should NOT deliver (slot was discarded due to overflow) */

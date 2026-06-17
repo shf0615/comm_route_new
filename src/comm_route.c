@@ -617,7 +617,7 @@ static void cr_handle_local_frame(cr_internal_t *self, cr_instance_t *inst,
     uint8_t ctl = data[2];
     uint8_t biz_id = CR_CTL_BIZ_ID(ctl);
     const uint8_t *payload = &data[CR_FRAME_HEADER_SIZE];
-    uint16_t payload_len = len - CR_FRAME_HEADER_SIZE;
+    uint16_t payload_len = data[5];  /* LEN field */
 
     uint8_t is_ack = CR_CTL_IS_ACK(ctl) ? 1 : 0;
     if (is_ack) {
@@ -751,7 +751,7 @@ static void cr_handle_broadcast_frame(cr_internal_t *self, cr_instance_t *inst,
     uint8_t ctl = data[2];
     uint8_t biz_id = CR_CTL_BIZ_ID(ctl);
     const uint8_t *payload = &data[CR_FRAME_HEADER_SIZE];
-    uint16_t payload_len = len - CR_FRAME_HEADER_SIZE;
+    uint16_t payload_len = data[5];  /* LEN field */
     uint8_t seq = data[3];
     uint8_t ttl = data[4];
 
