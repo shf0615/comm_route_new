@@ -103,8 +103,8 @@ void test_ack_reply_normal(void) {
     cr_send(&inst, 0x03, 0, data, 3, mock_on_complete, NULL);
     cr_poll(&inst); /* sends frame, enters WAIT_ACK */
 
-    /* ACK帧: DST=0x01, SRC=0x03, CTL.bit7=1, SEQ=匹配 */
-    uint8_t ack_frame[] = {0x01, 0x03, 0x80, sent_buf[3], 0x03};
+    /* ACK帧: DST=0x01, SRC=0x03, CTL.bit7=1, SEQ=匹配, TTL=3, LEN=0 */
+    uint8_t ack_frame[] = {0x01, 0x03, 0x80, sent_buf[3], 0x03, 0x00};
     cr_feed_frame(&inst, ack_frame, sizeof(ack_frame));
 
     TEST_ASSERT_EQUAL_INT(1, complete_called);
@@ -191,8 +191,8 @@ void test_receiver_auto_sends_ack(void) {
 
     send_count = 0;
     sent_len = 0;
-    /* 喂入数据帧: DST=0x03, SRC=0x01, CTL=0x00, SEQ=5, TTL=3, payload */
-    uint8_t frame[] = {0x03, 0x01, 0x00, 0x05, 0x03, 'H', 'I'};
+    /* 喂入数据帧: DST=0x03, SRC=0x01, CTL=0x00, SEQ=5, TTL=3, LEN=2, payload */
+    uint8_t frame[] = {0x03, 0x01, 0x00, 0x05, 0x03, 0x02, 'H', 'I'};
     cr_feed_frame(&inst, frame, sizeof(frame));
 
     /* 验证自动发了 ACK */
@@ -259,8 +259,8 @@ void test_long_data_complete_with_ack(void) {
     /* 3 帧，每帧发送后收到ACK */
     for (int i = 0; i < 3; i++) {
         cr_poll(&inst); /* 发送帧i */
-        /* 构造 ACK */
-        uint8_t ack[] = {0x01, 0x03, 0x80, sent_buf[3], 0x03};
+        /* 构造 ACK, LEN=0 */
+        uint8_t ack[] = {0x01, 0x03, 0x80, sent_buf[3], 0x03, 0x00};
         cr_feed_frame(&inst, ack, sizeof(ack));
     }
 

@@ -107,8 +107,8 @@ void test_send_zero_length_data(void) {
     cr_poll(&ex_inst);
 
     TEST_ASSERT_EQUAL_INT(1, ex_send_count);
-    /* Frame: 5-byte header + 0 payload */
-    TEST_ASSERT_EQUAL_UINT16(5, ex_sent_len);
+    /* Frame: 6-byte header + 0 payload */
+    TEST_ASSERT_EQUAL_UINT16(6, ex_sent_len);
     /* Complete should be called (ack disabled, fire-and-forget) */
     TEST_ASSERT_EQUAL_INT(1, ex_complete_called);
     TEST_ASSERT_EQUAL_UINT8(0, ex_complete_status);
@@ -123,8 +123,8 @@ void test_broadcast_zero_length(void) {
     cr_poll(&ex_inst);
 
     TEST_ASSERT_EQUAL_INT(1, ex_send_count);
-    /* Broadcast frame: 5-byte header + 0 payload */
-    TEST_ASSERT_EQUAL_UINT16(5, ex_sent_len);
+    /* Broadcast frame: 6-byte header + 0 payload */
+    TEST_ASSERT_EQUAL_UINT16(6, ex_sent_len);
     /* CTL: broadcast bit set */
     TEST_ASSERT_BITS(0x40, 0x40, ex_sent_buf[2]);
 }
@@ -134,13 +134,13 @@ void test_send_exactly_mtu(void) {
     ex_hal.send = ex_mock_send_history;
     cr_set_hal(&ex_inst, &ex_hal);
 
-    uint8_t data[8] = {1,2,3,4,5,6,7,8};
-    cr_send(&ex_inst, 0x02, 0, data, 8, NULL, NULL);
+    uint8_t data[7] = {1,2,3,4,5,6,7};
+    cr_send(&ex_inst, 0x02, 0, data, 7, NULL, NULL);
     cr_poll(&ex_inst);
 
     /* Exactly MTU → single frame, no fragmentation */
     TEST_ASSERT_EQUAL_INT(1, ex_send_history_count);
-    TEST_ASSERT_EQUAL_UINT16(5 + 8, ex_send_history_len[0]);
+    TEST_ASSERT_EQUAL_UINT16(6 + 7, ex_send_history_len[0]);
     /* CTL: no FRAG bit */
     TEST_ASSERT_BITS(0x20, 0x00, ex_send_history[0][2]);
 }
@@ -150,17 +150,17 @@ void test_send_mtu_plus_one(void) {
     ex_hal.send = ex_mock_send_history;
     cr_set_hal(&ex_inst, &ex_hal);
 
-    uint8_t data[9] = {1,2,3,4,5,6,7,8,9};
-    cr_send(&ex_inst, 0x02, 0, data, 9, NULL, NULL);
+    uint8_t data[8] = {1,2,3,4,5,6,7,8};
+    cr_send(&ex_inst, 0x02, 0, data, 8, NULL, NULL);
     cr_poll(&ex_inst);
     cr_poll(&ex_inst);
 
     /* MTU+1 → 2 frames */
     TEST_ASSERT_EQUAL_INT(2, ex_send_history_count);
-    /* Frame 1: 5 header + 8 payload */
+    /* Frame 1: 6 header + 7 payload */
     TEST_ASSERT_EQUAL_UINT16(13, ex_send_history_len[0]);
-    /* Frame 2: 5 header + 1 payload (last frag) */
-    TEST_ASSERT_EQUAL_UINT16(6, ex_send_history_len[1]);
+    /* Frame 2: 6 header + 1 payload (last frag) */
+    TEST_ASSERT_EQUAL_UINT16(7, ex_send_history_len[1]);
     /* Frame 1: FRAG=1, LAST=0 */
     TEST_ASSERT_BITS(0x20, 0x20, ex_send_history[0][2]);
     TEST_ASSERT_BITS(0x10, 0x00, ex_send_history[0][2]);
@@ -194,7 +194,7 @@ void test_seq_counter_wraps(void) {
 void test_feed_frame_too_short(void) {
     ex_setup(0x02, 64, 0, CR_ACK_MODE_REPLY, NULL, 0);
 
-    /* Frame shorter than 5 bytes should be silently ignored */
+    /* Frame shorter than 6 bytes should be silently ignored */
     uint8_t short_frame[] = {0x02, 0x01, 0x00, 0x00}; /* 4 bytes */
     cr_feed_frame(&ex_inst, short_frame, 4);
 
@@ -205,9 +205,9 @@ void test_feed_frame_too_short(void) {
 void test_feed_frame_exactly_header(void) {
     ex_setup(0x02, 64, 0, CR_ACK_MODE_REPLY, NULL, 0);
 
-    /* Frame exactly 5 bytes (header only, 0 payload) — should deliver with len=0 */
-    uint8_t frame[] = {0x02, 0x01, 0x00, 0x00, 0x03};
-    cr_feed_frame(&ex_inst, frame, 5);
+    /* Frame exactly 6 bytes (header only, LEN=0) — should deliver with len=0 */
+    uint8_t frame[] = {0x02, 0x01, 0x00, 0x00, 0x03, 0x00};
+    cr_feed_frame(&ex_inst, frame, 6);
 
     TEST_ASSERT_EQUAL_INT(1, ex_recv_called);
     TEST_ASSERT_EQUAL_UINT8(0x01, ex_recv_src);
@@ -217,18 +217,18 @@ void test_feed_frame_exactly_header(void) {
 void test_rx_out_of_order_frame_dropped(void) {
     ex_setup(0x02, 64, 0, CR_ACK_MODE_REPLY, NULL, 0);
 
-    /* Fragment with seq=0 (first, allocates slot) */
-    uint8_t f0[] = {0x02, 0x01, 0x20, 0x00, 0x03, 1, 2, 3};
+    /* Fragment with seq=0 (first, allocates slot), LEN=3 */
+    uint8_t f0[] = {0x02, 0x01, 0x20, 0x00, 0x03, 0x03, 1, 2, 3};
     cr_feed_frame(&ex_inst, f0, sizeof(f0));
     TEST_ASSERT_EQUAL_INT(0, ex_recv_called);
 
-    /* Skip seq=1, send seq=2 (out of order, > expected) → dropped */
-    uint8_t f2[] = {0x02, 0x01, 0x30, 0x02, 0x03, 7, 8, 9};
+    /* Skip seq=1, send seq=2 (out of order, > expected) → dropped, LEN=3 */
+    uint8_t f2[] = {0x02, 0x01, 0x30, 0x02, 0x03, 0x03, 7, 8, 9};
     cr_feed_frame(&ex_inst, f2, sizeof(f2));
     TEST_ASSERT_EQUAL_INT(0, ex_recv_called);
 
-    /* Now send correct seq=1 with LAST → should deliver (only f0 + f1 data) */
-    uint8_t f1[] = {0x02, 0x01, 0x30, 0x01, 0x03, 4, 5, 6};
+    /* Now send correct seq=1 with LAST → should deliver (only f0 + f1 data), LEN=3 */
+    uint8_t f1[] = {0x02, 0x01, 0x30, 0x01, 0x03, 0x03, 4, 5, 6};
     cr_feed_frame(&ex_inst, f1, sizeof(f1));
     TEST_ASSERT_EQUAL_INT(1, ex_recv_called);
     TEST_ASSERT_EQUAL_UINT16(6, ex_recv_len); /* f0(3) + f1(3) */
@@ -242,15 +242,15 @@ void test_ack_wrong_seq_ignored(void) {
     cr_send(&ex_inst, 0x02, 0, data, 1, ex_on_complete, NULL);
     cr_poll(&ex_inst); /* sends frame, enters WAIT_ACK */
 
-    /* Construct ACK with wrong SEQ */
-    uint8_t ack_frame[] = {0x01, 0x02, 0x80, 0xFF, 0x03}; /* SEQ=0xFF, not 0 */
+    /* Construct ACK with wrong SEQ, LEN=0 */
+    uint8_t ack_frame[] = {0x01, 0x02, 0x80, 0xFF, 0x03, 0x00}; /* SEQ=0xFF, not 0 */
     cr_feed_frame(&ex_inst, ack_frame, sizeof(ack_frame));
 
     /* Should NOT complete */
     TEST_ASSERT_EQUAL_INT(0, ex_complete_called);
 
-    /* Now send correct ACK with SEQ=0 */
-    uint8_t ack_ok[] = {0x01, 0x02, 0x80, 0x00, 0x03};
+    /* Now send correct ACK with SEQ=0, LEN=0 */
+    uint8_t ack_ok[] = {0x01, 0x02, 0x80, 0x00, 0x03, 0x00};
     cr_feed_frame(&ex_inst, ack_ok, sizeof(ack_ok));
     TEST_ASSERT_EQUAL_INT(1, ex_complete_called);
     TEST_ASSERT_EQUAL_UINT8(0, ex_complete_status);
@@ -288,7 +288,7 @@ void test_feed_frame_no_hal_set(void) {
 
     /* With ack_enabled=1 and no HAL, cr_feed_frame should return early
      * without crashing (NULL guard). No delivery expected. */
-    uint8_t frame[] = {0x02, 0x01, 0x00, 0x00, 0x03, 'X'};
+    uint8_t frame[] = {0x02, 0x01, 0x00, 0x00, 0x03, 0x01, 'X'};
     cr_feed_frame(&inst_no_hal, frame, sizeof(frame));
 
     TEST_ASSERT_EQUAL_INT(0, ex_recv_called);
@@ -620,15 +620,15 @@ void test_dedup_table_ring_overwrite(void) {
 
     /* Send 4 different broadcast frames (fills dedup table) */
     for (uint8_t i = 0; i < 4; i++) {
-        /* DST=0xFF(broadcast), SRC=0x10+i, CTL=0x40(bcast), SEQ=i, TTL=0(no fwd) */
-        uint8_t frame[] = {0xFF, (uint8_t)(0x10 + i), 0x40, i, 0x00, 0xAA};
+        /* DST=0xFF(broadcast), SRC=0x10+i, CTL=0x40(bcast), SEQ=i, TTL=0(no fwd), LEN=1 */
+        uint8_t frame[] = {0xFF, (uint8_t)(0x10 + i), 0x40, i, 0x00, 0x01, 0xAA};
         cr_feed_frame(&inst, frame, sizeof(frame));
     }
     TEST_ASSERT_EQUAL_INT(4, ex_recv_called);
 
     /* Re-send first broadcast (src=0x10, seq=0) → should be deduped */
     ex_recv_called = 0;
-    uint8_t dup_frame[] = {0xFF, 0x10, 0x40, 0x00, 0x00, 0xAA};
+    uint8_t dup_frame[] = {0xFF, 0x10, 0x40, 0x00, 0x00, 0x01, 0xAA};
     cr_feed_frame(&inst, dup_frame, sizeof(dup_frame));
     TEST_ASSERT_EQUAL_INT(0, ex_recv_called); /* still deduped */
 
@@ -661,8 +661,8 @@ void test_send_deep_copy(void) {
     cr_poll(&ex_inst);
 
     TEST_ASSERT_EQUAL_INT(1, ex_send_history_count);
-    /* Payload starts at offset 5 (after 5-byte header) */
-    TEST_ASSERT_EQUAL_UINT8_ARRAY((const uint8_t *)"ORIGINAL", &ex_send_history[0][5], 8);
+    /* Payload starts at offset 6 (after 6-byte header) */
+    TEST_ASSERT_EQUAL_UINT8_ARRAY((const uint8_t *)"ORIGINAL", &ex_send_history[0][6], 8);
 }
 
 void test_broadcast_deep_copy(void) {
@@ -681,8 +681,8 @@ void test_broadcast_deep_copy(void) {
     cr_poll(&ex_inst);
 
     TEST_ASSERT_EQUAL_INT(1, ex_send_history_count);
-    /* Payload starts at offset 5 */
-    TEST_ASSERT_EQUAL_UINT8_ARRAY((const uint8_t *)"BCAST1", &ex_send_history[0][5], 6);
+    /* Payload starts at offset 6 */
+    TEST_ASSERT_EQUAL_UINT8_ARRAY((const uint8_t *)"BCAST1", &ex_send_history[0][6], 6);
 }
 
 void test_broadcast_queue_multiple(void) {
@@ -707,10 +707,10 @@ void test_broadcast_queue_multiple(void) {
 
     TEST_ASSERT_TRUE(ex_send_history_count >= 3);
 
-    /* Verify FIFO order: payload at offset 5 */
-    TEST_ASSERT_EQUAL_UINT8_ARRAY((const uint8_t *)"AAA", &ex_send_history[0][5], 3);
-    TEST_ASSERT_EQUAL_UINT8_ARRAY((const uint8_t *)"BBB", &ex_send_history[1][5], 3);
-    TEST_ASSERT_EQUAL_UINT8_ARRAY((const uint8_t *)"CCC", &ex_send_history[2][5], 3);
+    /* Verify FIFO order: payload at offset 6 */
+    TEST_ASSERT_EQUAL_UINT8_ARRAY((const uint8_t *)"AAA", &ex_send_history[0][6], 3);
+    TEST_ASSERT_EQUAL_UINT8_ARRAY((const uint8_t *)"BBB", &ex_send_history[1][6], 3);
+    TEST_ASSERT_EQUAL_UINT8_ARRAY((const uint8_t *)"CCC", &ex_send_history[2][6], 3);
 }
 
 void test_broadcast_queue_full(void) {

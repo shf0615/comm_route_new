@@ -98,6 +98,11 @@ extern void test_error_notify_send_done_null(void);
 extern void test_unicast_forward_ttl_not_decremented(void);
 extern void test_interrupt_mode_long_data_multi_frame(void);
 
+/* test_len_field.c */
+extern void test_tx_fills_len_field(void);
+extern void test_ack_frame_len_zero(void);
+extern void test_broadcast_fills_len_field(void);
+
 void setUp(void) {}
 void tearDown(void) {}
 
@@ -197,5 +202,9 @@ int main(void) {
     RUN_TEST(test_error_notify_send_done_null);
     RUN_TEST(test_unicast_forward_ttl_not_decremented);
     RUN_TEST(test_interrupt_mode_long_data_multi_frame);
+    /* test_len_field.c */
+    RUN_TEST(test_tx_fills_len_field);
+    RUN_TEST(test_ack_frame_len_zero);
+    RUN_TEST(test_broadcast_fills_len_field);
     return UNITY_END();
 }

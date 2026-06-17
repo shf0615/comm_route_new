@@ -61,8 +61,8 @@ static void setup_instance(uint8_t addr, const cr_route_entry_t *routes, uint8_t
 void test_receive_unicast_single_frame(void) {
     setup_instance(0x02, NULL, 0);
 
-    /* 帧: DST=0x02, SRC=0x01, CTL=0x00, SEQ=0, TTL=3, payload="HI" */
-    uint8_t frame[] = {0x02, 0x01, 0x00, 0x00, 0x03, 'H', 'I'};
+    /* 帧: DST=0x02, SRC=0x01, CTL=0x00, SEQ=0, TTL=3, LEN=2, payload="HI" */
+    uint8_t frame[] = {0x02, 0x01, 0x00, 0x00, 0x03, 0x02, 'H', 'I'};
     cr_feed_frame(&inst, frame, sizeof(frame));
 
     TEST_ASSERT_EQUAL_INT(1, recv_called);
@@ -78,8 +78,8 @@ void test_forward_frame_to_next_hop(void) {
     cr_route_entry_t routes[] = { {.dest = 0x03, .next_hop = 0x03} };
     setup_instance(0x02, routes, 1);
 
-    /* 帧: DST=0x03, SRC=0x01 → 不是本机，查路由转发 */
-    uint8_t frame[] = {0x03, 0x01, 0x00, 0x00, 0x03, 'D', 'A', 'T', 'A'};
+    /* 帧: DST=0x03, SRC=0x01, LEN=4 → 不是本机，查路由转发 */
+    uint8_t frame[] = {0x03, 0x01, 0x00, 0x00, 0x03, 0x04, 'D', 'A', 'T', 'A'};
     cr_feed_frame(&inst, frame, sizeof(frame));
 
     /* 应转发，恰好调用一次 send */
@@ -94,8 +94,8 @@ void test_drop_frame_no_route(void) {
     cr_route_entry_t routes[] = { {.dest = 0x03, .next_hop = 0x03} };
     setup_instance(0x02, routes, 1);
 
-    /* DST=0x05 无路由 */
-    uint8_t frame[] = {0x05, 0x01, 0x00, 0x00, 0x03, 'X'};
+    /* DST=0x05 无路由, LEN=1 */
+    uint8_t frame[] = {0x05, 0x01, 0x00, 0x00, 0x03, 0x01, 'X'};
     cr_feed_frame(&inst, frame, sizeof(frame));
 
     TEST_ASSERT_EQUAL_INT(0, send_count);
@@ -105,12 +105,12 @@ void test_drop_frame_no_route(void) {
 void test_receive_multi_frame_assembly(void) {
     setup_instance(0x02, NULL, 0);
 
-    /* 帧1: DST=0x02, SRC=0x01, CTL=0x20(分片), SEQ=0, TTL=3, payload 8B */
-    uint8_t f1[] = {0x02, 0x01, 0x20, 0x00, 0x03, 0,1,2,3,4,5,6,7};
-    /* 帧2: CTL=0x20(分片), SEQ=1 */
-    uint8_t f2[] = {0x02, 0x01, 0x20, 0x01, 0x03, 8,9,10,11,12,13,14,15};
-    /* 帧3: CTL=0x30(分片+末帧), SEQ=2, payload 4B */
-    uint8_t f3[] = {0x02, 0x01, 0x30, 0x02, 0x03, 16,17,18,19};
+    /* 帧1: DST=0x02, SRC=0x01, CTL=0x20(分片), SEQ=0, TTL=3, LEN=8, payload 8B */
+    uint8_t f1[] = {0x02, 0x01, 0x20, 0x00, 0x03, 0x08, 0,1,2,3,4,5,6,7};
+    /* 帧2: CTL=0x20(分片), SEQ=1, LEN=8 */
+    uint8_t f2[] = {0x02, 0x01, 0x20, 0x01, 0x03, 0x08, 8,9,10,11,12,13,14,15};
+    /* 帧3: CTL=0x30(分片+末帧), SEQ=2, LEN=4, payload 4B */
+    uint8_t f3[] = {0x02, 0x01, 0x30, 0x02, 0x03, 0x04, 16,17,18,19};
 
     cr_feed_frame(&inst, f1, sizeof(f1));
     TEST_ASSERT_EQUAL_INT(0, recv_called);
@@ -127,9 +127,9 @@ void test_receive_multi_frame_assembly(void) {
 
 void test_rx_assembly_timeout(void) {
     setup_instance(0x02, NULL, 0);
-    /* 喂入帧0和帧1（分片，非末帧） */
-    uint8_t f0[] = {0x02, 0x01, 0x20, 0x00, 0x03, 1,2,3,4,5,6,7,8};
-    uint8_t f1[] = {0x02, 0x01, 0x20, 0x01, 0x03, 9,10,11,12,13,14,15,16};
+    /* 喂入帧0和帧1（分片，非末帧）LEN=8 */
+    uint8_t f0[] = {0x02, 0x01, 0x20, 0x00, 0x03, 0x08, 1,2,3,4,5,6,7,8};
+    uint8_t f1[] = {0x02, 0x01, 0x20, 0x01, 0x03, 0x08, 9,10,11,12,13,14,15,16};
     cr_feed_frame(&inst, f0, sizeof(f0));
     cr_feed_frame(&inst, f1, sizeof(f1));
     TEST_ASSERT_EQUAL_INT(0, recv_called);
@@ -140,7 +140,7 @@ void test_rx_assembly_timeout(void) {
 
     /* 帧2(末帧)到达——槽已释放，应该不触发回调 */
     recv_called = 0;
-    uint8_t f2[] = {0x02, 0x01, 0x30, 0x02, 0x03, 17,18,19,20};
+    uint8_t f2[] = {0x02, 0x01, 0x30, 0x02, 0x03, 0x04, 17,18,19,20};
     cr_feed_frame(&inst, f2, sizeof(f2));
     /* SEQ=2 但无活跃槽（已释放），无法匹配，不触发 */
     TEST_ASSERT_EQUAL_INT(0, recv_called);
@@ -150,14 +150,14 @@ void test_rx_slot_full_drops_new(void) {
     /* rx_assem_count=2 in setup */
     setup_instance(0x02, NULL, 0);
 
-    /* 占满2个槽 */
-    uint8_t f_a[] = {0x02, 0x01, 0x20, 0x00, 0x03, 1,2,3};
-    uint8_t f_b[] = {0x02, 0x03, 0x20, 0x00, 0x03, 4,5,6};
+    /* 占满2个槽, LEN=3 */
+    uint8_t f_a[] = {0x02, 0x01, 0x20, 0x00, 0x03, 0x03, 1,2,3};
+    uint8_t f_b[] = {0x02, 0x03, 0x20, 0x00, 0x03, 0x03, 4,5,6};
     cr_feed_frame(&inst, f_a, sizeof(f_a));
     cr_feed_frame(&inst, f_b, sizeof(f_b));
 
-    /* 第三个源的首帧 */
-    uint8_t f_c[] = {0x02, 0x04, 0x20, 0x00, 0x03, 7,8,9};
+    /* 第三个源的首帧, LEN=3 */
+    uint8_t f_c[] = {0x02, 0x04, 0x20, 0x00, 0x03, 0x03, 7,8,9};
     cr_feed_frame(&inst, f_c, sizeof(f_c));
     /* 无可用槽，丢弃 */
     TEST_ASSERT_EQUAL_INT(0, recv_called);
@@ -166,17 +166,17 @@ void test_rx_slot_full_drops_new(void) {
 void test_rx_duplicate_frame_ignored(void) {
     setup_instance(0x02, NULL, 0);
 
-    uint8_t f0[] = {0x02, 0x01, 0x20, 0x00, 0x03, 1,2,3,4,5,6,7,8};
-    uint8_t f1[] = {0x02, 0x01, 0x20, 0x01, 0x03, 9,10,11,12,13,14,15,16};
+    uint8_t f0[] = {0x02, 0x01, 0x20, 0x00, 0x03, 0x08, 1,2,3,4,5,6,7,8};
+    uint8_t f1[] = {0x02, 0x01, 0x20, 0x01, 0x03, 0x08, 9,10,11,12,13,14,15,16};
     cr_feed_frame(&inst, f0, sizeof(f0));
     cr_feed_frame(&inst, f1, sizeof(f1));
 
     /* 重复帧1 */
     cr_feed_frame(&inst, f1, sizeof(f1));
 
-    /* 发末帧验证数据正确 */
+    /* 发末帧验证数据正确, LEN=4 */
     recv_called = 0;
-    uint8_t f2[] = {0x02, 0x01, 0x30, 0x02, 0x03, 17,18,19,20};
+    uint8_t f2[] = {0x02, 0x01, 0x30, 0x02, 0x03, 0x04, 17,18,19,20};
     cr_feed_frame(&inst, f2, sizeof(f2));
     TEST_ASSERT_EQUAL_INT(1, recv_called);
     TEST_ASSERT_EQUAL_UINT16(20, recv_len);

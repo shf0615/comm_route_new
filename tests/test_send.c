@@ -50,9 +50,9 @@ void test_unicast_send_single_frame(void) {
     TEST_ASSERT_EQUAL_UINT8(0x00, sent_buf[2]);
     TEST_ASSERT_EQUAL_UINT8(3, sent_buf[4]);
     /* payload */
-    TEST_ASSERT_EQUAL_UINT8_ARRAY(payload, &sent_buf[5], 5);
-    /* total length = 5 header + 5 payload */
-    TEST_ASSERT_EQUAL_UINT16(10, sent_len);
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(payload, &sent_buf[6], 5);
+    /* total length = 6 header + 5 payload */
+    TEST_ASSERT_EQUAL_UINT16(11, sent_len);
 }
 
 void test_send_queue_full(void) {
@@ -117,12 +117,12 @@ void test_long_data_segmentation(void) {
     cr_poll(&inst); cr_poll(&inst); cr_poll(&inst);
 
     TEST_ASSERT_EQUAL_INT(3, send_history_count);
-    /* 帧1: 5头 + 8负载 = 13 */
+    /* 帧1: 6头 + 7负载 = 13 */
     TEST_ASSERT_EQUAL_UINT16(13, send_history_len[0]);
-    /* 帧2: 5 + 8 = 13 */
+    /* 帧2: 6 + 7 = 13 */
     TEST_ASSERT_EQUAL_UINT16(13, send_history_len[1]);
-    /* 帧3: 5 + 4 = 9 */
-    TEST_ASSERT_EQUAL_UINT16(9, send_history_len[2]);
+    /* 帧3: 6 + 6 = 12 */
+    TEST_ASSERT_EQUAL_UINT16(12, send_history_len[2]);
 
     /* CTL: 帧1 分片=1 末帧=0 */
     TEST_ASSERT_BITS(0x20, 0x20, send_history[0][2]);

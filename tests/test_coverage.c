@@ -95,10 +95,10 @@ static void cov_setup(const cr_config_t *cfg) {
  * 边界情况
  * ================================================================ */
 
-/* [额外-边界] MTU=1 时的拆帧 */
+/* [额外-边界] MTU=7 时的拆帧（帧头6字节，每帧1字节载荷） */
 void test_boundary_mtu_one_segmentation(void) {
     cr_config_t cfg = {
-        .local_addr = 0x01, .mtu = 6, .frame_interval_ms = 0,
+        .local_addr = 0x01, .mtu = 7, .frame_interval_ms = 0,
         .ack_enabled = 0, .ack_mode = CR_ACK_MODE_REPLY,
         .default_ttl = 3, .tx_queue_depth = 4,
         .rx_assem_count = 2, .dedup_table_size = 8,
@@ -113,7 +113,7 @@ void test_boundary_mtu_one_segmentation(void) {
     cov_hal.hw_ctx = NULL;
     cr_set_hal(&cov_inst, &cov_hal);
 
-    /* 5 bytes data → 5 frames with MTU=1 */
+    /* 5 bytes data → 5 frames with payload=1 per frame (MTU=7, header=6) */
     uint8_t data[] = {0xA1, 0xA2, 0xA3, 0xA4, 0xA5};
     cr_send(&cov_inst, 0x02, 0, data, 5, cov_on_complete, NULL);
 
@@ -122,9 +122,9 @@ void test_boundary_mtu_one_segmentation(void) {
     }
 
     TEST_ASSERT_EQUAL_INT(5, cov_send_history_count);
-    /* Each frame: 5-byte header + 1-byte payload = 6 bytes */
+    /* Each frame: 6-byte header + 1-byte payload = 7 bytes */
     for (int i = 0; i < 5; i++) {
-        TEST_ASSERT_EQUAL_UINT16(6, cov_send_history_len[i]);
+        TEST_ASSERT_EQUAL_UINT16(7, cov_send_history_len[i]);
     }
     /* First 4: FRAG=1, LAST=0; Last: FRAG=1, LAST=1 */
     for (int i = 0; i < 4; i++) {
@@ -133,9 +133,9 @@ void test_boundary_mtu_one_segmentation(void) {
     }
     TEST_ASSERT_BITS(0x30, 0x30, cov_send_history[4][2]); /* FRAG+LAST */
 
-    /* Verify payload content byte by byte */
+    /* Verify payload content byte by byte (payload at offset 6) */
     for (int i = 0; i < 5; i++) {
-        TEST_ASSERT_EQUAL_UINT8(data[i], cov_send_history[i][5]);
+        TEST_ASSERT_EQUAL_UINT8(data[i], cov_send_history[i][6]);
     }
 
     /* Complete callback invoked */
@@ -234,13 +234,13 @@ void test_boundary_rx_buf_exactly_fits(void) {
     };
     cov_setup(&cfg);
 
-    /* Frag 0: 8 bytes payload */
-    uint8_t f0[] = {0x02, 0x01, 0x20, 0x00, 0x03, 1,2,3,4,5,6,7,8};
+    /* Frag 0: 8 bytes payload, LEN=8 */
+    uint8_t f0[] = {0x02, 0x01, 0x20, 0x00, 0x03, 0x08, 1,2,3,4,5,6,7,8};
     cr_feed_frame(&cov_inst, f0, sizeof(f0));
     TEST_ASSERT_EQUAL_INT(0, cov_recv_called);
 
-    /* Frag 1 (LAST): 8 bytes payload → total=16, exactly fits rx_buf_per_slot */
-    uint8_t f1[] = {0x02, 0x01, 0x30, 0x01, 0x03, 9,10,11,12,13,14,15,16};
+    /* Frag 1 (LAST): 8 bytes payload → total=16, exactly fits rx_buf_per_slot, LEN=8 */
+    uint8_t f1[] = {0x02, 0x01, 0x30, 0x01, 0x03, 0x08, 9,10,11,12,13,14,15,16};
     cr_feed_frame(&cov_inst, f1, sizeof(f1));
     TEST_ASSERT_EQUAL_INT(1, cov_recv_called);
     TEST_ASSERT_EQUAL_UINT16(16, cov_recv_len);
@@ -260,12 +260,12 @@ void test_boundary_rx_buf_one_byte_short(void) {
     };
     cov_setup(&cfg);
 
-    uint8_t f0[] = {0x02, 0x01, 0x20, 0x00, 0x03, 1,2,3,4,5,6,7,8};
+    uint8_t f0[] = {0x02, 0x01, 0x20, 0x00, 0x03, 0x08, 1,2,3,4,5,6,7,8};
     cr_feed_frame(&cov_inst, f0, sizeof(f0));
     TEST_ASSERT_EQUAL_INT(0, cov_recv_called);
 
-    /* Frag 1: 8 bytes → total would be 16 > 15 → overflow, slot dropped */
-    uint8_t f1[] = {0x02, 0x01, 0x30, 0x01, 0x03, 9,10,11,12,13,14,15,16};
+    /* Frag 1: 8 bytes → total would be 16 > 15 → overflow, slot dropped, LEN=8 */
+    uint8_t f1[] = {0x02, 0x01, 0x30, 0x01, 0x03, 0x08, 9,10,11,12,13,14,15,16};
     cr_feed_frame(&cov_inst, f1, sizeof(f1));
     TEST_ASSERT_EQUAL_INT(0, cov_recv_called);
 }
@@ -323,7 +323,7 @@ void test_error_feed_frame_null_data(void) {
 
 /* [额外-异常] cr_feed_frame 传入 NULL instance */
 void test_error_feed_frame_null_instance(void) {
-    uint8_t frame[] = {0x02, 0x01, 0x00, 0x00, 0x03, 'X'};
+    uint8_t frame[] = {0x02, 0x01, 0x00, 0x00, 0x03, 0x01, 'X'};
     /* Should not crash */
     cr_feed_frame(NULL, frame, sizeof(frame));
     /* No assertion needed — just verify no crash */
@@ -479,8 +479,8 @@ void test_safety_forged_frame_invalid_ctl(void) {
     };
     cov_setup(&cfg);
 
-    /* CTL = 0xF0 (ACK+BROADCAST+FRAG+LAST all set) — should not crash */
-    uint8_t frame[] = {0x02, 0x01, 0xF0, 0x00, 0x03, 'X', 'Y'};
+    /* CTL = 0xF0 (ACK+BROADCAST+FRAG+LAST all set) — should not crash, LEN=2 */
+    uint8_t frame[] = {0x02, 0x01, 0xF0, 0x00, 0x03, 0x02, 'X', 'Y'};
     cr_feed_frame(&cov_inst, frame, sizeof(frame));
 
     /* Since ACK bit is set, it'll be treated as ACK frame → no recv callback */
@@ -500,8 +500,8 @@ void test_safety_forged_unicast_to_broadcast_addr(void) {
     };
     cov_setup(&cfg);
 
-    /* DST=0xFF but CTL doesn't have broadcast bit → cr_handle_broadcast_frame path */
-    uint8_t frame[] = {0xFF, 0x01, 0x00, 0x05, 0x02, 'Z'};
+    /* DST=0xFF but CTL doesn't have broadcast bit → cr_handle_broadcast_frame path, LEN=1 */
+    uint8_t frame[] = {0xFF, 0x01, 0x00, 0x05, 0x02, 0x01, 'Z'};
     cr_feed_frame(&cov_inst, frame, sizeof(frame));
 
     /* Should be handled as broadcast (checked by DST==0xFF) but CTL has no bcast bit
@@ -524,14 +524,14 @@ void test_safety_rx_frame_payload_exceeds_mtu(void) {
     };
     cov_setup(&cfg);
 
-    /* Frame with 20-byte payload (MTU=8), target is 0x03 → forward path */
-    uint8_t frame[25] = {0x03, 0x01, 0x00, 0x00, 0x03};
-    memset(&frame[5], 0xAA, 20);
-    cr_feed_frame(&cov_inst, frame, 25);
+    /* Frame with 20-byte payload (MTU=8), target is 0x03 → forward path, LEN=20 */
+    uint8_t frame[26] = {0x03, 0x01, 0x00, 0x00, 0x03, 20};
+    memset(&frame[6], 0xAA, 20);
+    cr_feed_frame(&cov_inst, frame, 26);
 
     /* The forward function doesn't check payload vs MTU - it just forwards raw */
     TEST_ASSERT_EQUAL_INT(1, cov_send_count);
-    TEST_ASSERT_EQUAL_UINT16(25, cov_sent_len);
+    TEST_ASSERT_EQUAL_UINT16(26, cov_sent_len);
 }
 
 /* [额外-安全] 接收广播帧 payload 超过 MTU → 不转发 */
@@ -547,11 +547,11 @@ void test_safety_rx_broadcast_oversized_no_forward(void) {
     };
     cov_setup(&cfg);
 
-    /* Broadcast frame with 10-byte payload (MTU=4): 5 header + 10 payload = 15 */
-    /* max_frame = 5 + 4 = 9, frame len = 15 > 9 → should NOT forward */
-    uint8_t frame[15] = {0xFF, 0x01, 0x40, 0x00, 0x02}; /* TTL=2 */
-    memset(&frame[5], 0xBB, 10);
-    cr_feed_frame(&cov_inst, frame, 15);
+    /* Broadcast frame with 10-byte payload (MTU=4): 6 header + 10 payload = 16 */
+    /* max_frame = MTU=4 is too small for even header, but we test forward guard */
+    uint8_t frame[16] = {0xFF, 0x01, 0x40, 0x00, 0x02, 10}; /* TTL=2, LEN=10 */
+    memset(&frame[6], 0xBB, 10);
+    cr_feed_frame(&cov_inst, frame, 16);
 
     /* Should still deliver to user */
     TEST_ASSERT_EQUAL_INT(1, cov_recv_called);
@@ -875,8 +875,8 @@ void test_stress_seq_wrap_with_ack(void) {
         cov_send_count = 0;
         cr_send(&cov_inst, 0x02, 0, &data, 1, NULL, NULL);
         cr_poll(&cov_inst);
-        /* ACK it */
-        uint8_t ack[] = {0x01, 0x02, 0x80, cov_sent_buf[3], 0x03};
+        /* ACK it, LEN=0 */
+        uint8_t ack[] = {0x01, 0x02, 0x80, cov_sent_buf[3], 0x03, 0x00};
         cr_feed_frame(&cov_inst, ack, sizeof(ack));
     }
 
@@ -887,8 +887,8 @@ void test_stress_seq_wrap_with_ack(void) {
     cr_poll(&cov_inst);
     TEST_ASSERT_EQUAL_UINT8(255, cov_sent_buf[3]);
 
-    /* ACK with SEQ=255 */
-    uint8_t ack255[] = {0x01, 0x02, 0x80, 255, 0x03};
+    /* ACK with SEQ=255, LEN=0 */
+    uint8_t ack255[] = {0x01, 0x02, 0x80, 255, 0x03, 0x00};
     cr_feed_frame(&cov_inst, ack255, sizeof(ack255));
     TEST_ASSERT_EQUAL_INT(1, cov_complete_called);
     TEST_ASSERT_EQUAL_UINT8(0, cov_complete_status);
@@ -900,8 +900,8 @@ void test_stress_seq_wrap_with_ack(void) {
     cr_poll(&cov_inst);
     TEST_ASSERT_EQUAL_UINT8(0, cov_sent_buf[3]);
 
-    /* ACK with SEQ=0 */
-    uint8_t ack0[] = {0x01, 0x02, 0x80, 0, 0x03};
+    /* ACK with SEQ=0, LEN=0 */
+    uint8_t ack0[] = {0x01, 0x02, 0x80, 0, 0x03, 0x00};
     cr_feed_frame(&cov_inst, ack0, sizeof(ack0));
     TEST_ASSERT_EQUAL_INT(1, cov_complete_called);
     TEST_ASSERT_EQUAL_UINT8(0, cov_complete_status);
@@ -973,8 +973,8 @@ void test_boundary_biz_id_propagation(void) {
     };
     cov_setup(&cfg);
 
-    /* CTL lower 4 bits = biz_id = 0x0A */
-    uint8_t frame[] = {0x02, 0x01, 0x0A, 0x00, 0x03, 'B', 'I', 'Z'};
+    /* CTL lower 4 bits = biz_id = 0x0A, LEN=3 */
+    uint8_t frame[] = {0x02, 0x01, 0x0A, 0x00, 0x03, 0x03, 'B', 'I', 'Z'};
     cr_feed_frame(&cov_inst, frame, sizeof(frame));
 
     TEST_ASSERT_EQUAL_INT(1, cov_recv_called);
@@ -1062,8 +1062,8 @@ void test_unicast_forward_ttl_not_decremented(void) {
     };
     cov_setup(&cfg);
 
-    /* 单播帧: DST=0x03, SRC=0x01, CTL=0x00, SEQ=0, TTL=3 */
-    uint8_t frame[] = {0x03, 0x01, 0x00, 0x00, 0x03, 'D', 'A', 'T', 'A'};
+    /* 单播帧: DST=0x03, SRC=0x01, CTL=0x00, SEQ=0, TTL=3, LEN=4 */
+    uint8_t frame[] = {0x03, 0x01, 0x00, 0x00, 0x03, 0x04, 'D', 'A', 'T', 'A'};
     cr_feed_frame(&cov_inst, frame, sizeof(frame));
 
     /* 应转发 */
@@ -1092,7 +1092,7 @@ void test_interrupt_mode_long_data_multi_frame(void) {
     cov_hal.send = cov_mock_send_history;
     cr_set_hal(&cov_inst, &cov_hal);
 
-    /* 20 bytes → 3 frames with MTU=8 (8+8+4) */
+    /* 20 bytes → 3 frames with MTU=13, header=6, payload_per_frame=7 (7+7+6) */
     uint8_t data[20];
     for (int i = 0; i < 20; i++) data[i] = (uint8_t)(i + 0x10);
     cov_complete_called = 0;
@@ -1114,10 +1114,10 @@ void test_interrupt_mode_long_data_multi_frame(void) {
 
     /* 验证 3 帧确实发出 */
     TEST_ASSERT_EQUAL_INT(3, cov_send_history_count);
-    /* 帧1: 5头 + 8负载 */
+    /* 帧1: 6头 + 7负载 = 13 */
     TEST_ASSERT_EQUAL_UINT16(13, cov_send_history_len[0]);
-    /* 帧2: 5头 + 8负载 */
+    /* 帧2: 6头 + 7负载 = 13 */
     TEST_ASSERT_EQUAL_UINT16(13, cov_send_history_len[1]);
-    /* 帧3: 5头 + 4负载 */
-    TEST_ASSERT_EQUAL_UINT16(9, cov_send_history_len[2]);
+    /* 帧3: 6头 + 6负载 = 12 */
+    TEST_ASSERT_EQUAL_UINT16(12, cov_send_history_len[2]);
 }

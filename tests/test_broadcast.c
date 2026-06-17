@@ -47,7 +47,7 @@ void test_broadcast_single_frame(void) {
     /* CTL: bit6=1(广播) → 0x40 */
     TEST_ASSERT_EQUAL_UINT8(0x40, sent_buf[2]);
     TEST_ASSERT_EQUAL_UINT8(3, sent_buf[4]);     /* TTL=3 */
-    TEST_ASSERT_EQUAL_UINT8_ARRAY(payload, &sent_buf[5], 5);
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(payload, &sent_buf[6], 5);
 }
 
 void test_broadcast_exceeds_mtu(void) {
@@ -128,8 +128,8 @@ static void setup_bcast_instance(uint8_t addr) {
 void test_receive_broadcast_and_forward(void) {
     setup_bcast_instance(0x02);
 
-    /* CTL: bit6=1(广播) → 0x40, SEQ=7, TTL=2 */
-    uint8_t frame[] = {0xFF, 0x01, 0x40, 0x07, 0x02, 'B'};
+    /* CTL: bit6=1(广播) → 0x40, SEQ=7, TTL=2, LEN=1 */
+    uint8_t frame[] = {0xFF, 0x01, 0x40, 0x07, 0x02, 0x01, 'B'};
     cr_feed_frame(&inst_b, frame, sizeof(frame));
 
     /* 交给上层 */
@@ -143,8 +143,8 @@ void test_receive_broadcast_and_forward(void) {
 void test_broadcast_ttl_zero_no_forward(void) {
     setup_bcast_instance(0x03);
 
-    /* TTL=0 */
-    uint8_t frame[] = {0xFF, 0x01, 0x40, 0x08, 0x00, 'X'};
+    /* TTL=0, LEN=1 */
+    uint8_t frame[] = {0xFF, 0x01, 0x40, 0x08, 0x00, 0x01, 'X'};
     cr_feed_frame(&inst_b, frame, sizeof(frame));
 
     TEST_ASSERT_EQUAL_INT(1, recv_called_b);   /* 仍处理 */
@@ -154,8 +154,8 @@ void test_broadcast_ttl_zero_no_forward(void) {
 void test_broadcast_dedup(void) {
     setup_bcast_instance(0x02);
 
-    /* 第一次：正常处理 */
-    uint8_t frame[] = {0xFF, 0x01, 0x40, 0x05, 0x02, 'D'};
+    /* 第一次：正常处理, LEN=1 */
+    uint8_t frame[] = {0xFF, 0x01, 0x40, 0x05, 0x02, 0x01, 'D'};
     cr_feed_frame(&inst_b, frame, sizeof(frame));
     TEST_ASSERT_EQUAL_INT(1, recv_called_b);
 

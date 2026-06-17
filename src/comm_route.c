@@ -3,7 +3,7 @@
 #include <stdint.h>
 
 /* ===== 常量定义 ===== */
-#define CR_FRAME_HEADER_SIZE 5
+#define CR_FRAME_HEADER_SIZE 6
 
 /* Alignment for internal structs (conservative: 4 bytes for uint32_t on ARM) */
 #define CR_ALIGN  4
@@ -432,6 +432,7 @@ static void cr_send_frame(cr_internal_t *self, cr_tx_task_t *task, uint8_t next_
                           (task->biz_id & 0x0F));
     frame[3] = task->seq;                      /* SEQ */
     frame[4] = self->cfg.default_ttl;          /* TTL */
+    frame[5] = (uint8_t)payload_len;           /* LEN */
 
     /* Copy payload from head_block */
     if (task->head_block != CR_POOL_NONE && payload_len > 0) {
@@ -606,6 +607,7 @@ static void cr_send_ack(cr_internal_t *self, uint8_t dest, uint8_t seq) {
     ack_frame[2] = CR_CTL_ACK_BIT;         /* CTL: bit7=1 (ACK) */
     ack_frame[3] = seq;                    /* SEQ = same as received */
     ack_frame[4] = self->cfg.default_ttl;  /* TTL */
+    ack_frame[5] = 0;                      /* LEN = 0 for ACK */
     self->hal->send(self->hal->hw_ctx, next_hop, ack_frame, CR_FRAME_HEADER_SIZE);
 }
 
