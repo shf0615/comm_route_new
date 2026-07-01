@@ -1121,3 +1121,96 @@ void test_interrupt_mode_long_data_multi_frame(void) {
     /* 帧3: 6头 + 6负载 = 12 */
     TEST_ASSERT_EQUAL_UINT16(12, cov_send_history_len[2]);
 }
+
+/* ===== 回归:广播插入长数据途中不应丢失长数据 =====
+ * Bug: seq_counter 实例级共享,cr_send/cr_broadcast/cr_send_frame 三处递增,
+ * 广播在长数据发送途中消耗一个 SEQ,使单播多片的 SEQ 出现空洞(如 0,1,3);
+ * 而 RX 重组做严格顺序校验(seq==expected_seq),末帧被判乱序丢弃,整条长数据
+ * 无法重组交付。修复方向:单播任务内分片 SEQ 连续递增。 */
+static cr_instance_t gap_tx_inst;
+static cr_instance_t gap_rx_inst;
+static uint8_t gap_tx_buf[8192];
+static uint8_t gap_rx_buf[8192];
+static uint8_t gap_frames[16][80];
+static uint16_t gap_frame_lens[16];
+static int gap_frame_count;
+
+static int gap_mock_send(void *ctx, uint8_t next_hop, const uint8_t *data, uint16_t len) {
+    (void)ctx; (void)next_hop;
+    if (gap_frame_count < 16 && len <= 80) {
+        memcpy(gap_frames[gap_frame_count], data, len);
+        gap_frame_lens[gap_frame_count] = len;
+    }
+    gap_frame_count++;
+    return 0;
+}
+
+static uint8_t gap_rx_data[512];
+static uint16_t gap_rx_len;
+static int gap_rx_called;
+static void gap_on_recv(cr_instance_t *inst, uint8_t src, uint8_t biz_id,
+                        const uint8_t *data, uint16_t len, void *ctx) {
+    (void)inst; (void)src; (void)biz_id; (void)ctx;
+    if (gap_rx_called == 0 && len <= sizeof(gap_rx_data)) {
+        memcpy(gap_rx_data, data, len);
+        gap_rx_len = len;
+    }
+    gap_rx_called++;
+}
+
+void test_broadcast_during_long_data_does_not_drop(void) {
+    cr_route_entry_t routes[] = { {.dest = 0x02, .next_hop = 0x02} };
+    cr_config_t tx_cfg = {
+        .local_addr = 0x01, .mtu = 64, .frame_interval_ms = 0,
+        .ack_enabled = 0, .ack_mode = CR_ACK_MODE_REPLY,
+        .default_ttl = 3, .tx_queue_depth = 4,
+        .rx_assem_count = 2, .dedup_table_size = 16,
+        .rx_assem_timeout_ms = 5000, .rx_buf_per_slot = 512,
+        .pool_size = 32, .bcast_queue_depth = 4,
+        .route_table = routes, .route_count = 1,
+    };
+    TEST_ASSERT_EQUAL_INT(0, cr_init(&gap_tx_inst, &tx_cfg, gap_tx_buf, sizeof(gap_tx_buf)));
+    cr_hal_t tx_hal = { .send = gap_mock_send, .get_tick_ms = cov_mock_get_tick, .hw_ctx = NULL };
+    cr_set_hal(&gap_tx_inst, &tx_hal);
+
+    cr_config_t rx_cfg = {
+        .local_addr = 0x02, .mtu = 64, .frame_interval_ms = 0,
+        .ack_enabled = 0, .ack_mode = CR_ACK_MODE_REPLY,
+        .default_ttl = 3, .tx_queue_depth = 4,
+        .rx_assem_count = 2, .dedup_table_size = 16,
+        .rx_assem_timeout_ms = 5000, .rx_buf_per_slot = 512,
+        .pool_size = 32, .bcast_queue_depth = 4,
+        .route_table = NULL, .route_count = 0,
+    };
+    TEST_ASSERT_EQUAL_INT(0, cr_init(&gap_rx_inst, &rx_cfg, gap_rx_buf, sizeof(gap_rx_buf)));
+    cr_hal_t rx_hal = { .send = gap_mock_send, .get_tick_ms = cov_mock_get_tick, .hw_ctx = NULL };
+    cr_set_hal(&gap_rx_inst, &rx_hal);
+    cr_set_recv_callback(&gap_rx_inst, gap_on_recv, NULL);
+
+    gap_frame_count = 0;
+    gap_rx_called = 0;
+    gap_rx_len = 0;
+
+    /* 130 字节 → 3 片 (58 + 58 + 14), 片3 为 LAST */
+    uint8_t data[130];
+    for (int i = 0; i < 130; i++) data[i] = (uint8_t)i;
+
+    TEST_ASSERT_EQUAL_INT(0, cr_send(&gap_tx_inst, 0x02, 0, data, 130, NULL, NULL));
+
+    cov_mock_tick = 1; cr_poll(&gap_tx_inst);                 /* 发片1 */
+    cr_broadcast(&gap_tx_inst, 1, (const uint8_t *)"BC", 2);  /* 长数据途中插入广播 */
+    cov_mock_tick = 2; cr_poll(&gap_tx_inst);                 /* 发广播 + 片2 */
+    cov_mock_tick = 3; cr_poll(&gap_tx_inst);                 /* 发片3 (LAST) */
+
+    /* 将 TX 发出的单播帧投递给 RX */
+    for (int i = 0; i < gap_frame_count; i++) {
+        if (gap_frames[i][0] == 0x02) {
+            cr_feed_frame(&gap_rx_inst, gap_frames[i], gap_frame_lens[i]);
+        }
+    }
+
+    /* 修复后期望:RX 完整收到 130 字节 */
+    TEST_ASSERT_EQUAL_INT(1, gap_rx_called);
+    TEST_ASSERT_EQUAL_UINT16(130, gap_rx_len);
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(data, gap_rx_data, 130);
+}

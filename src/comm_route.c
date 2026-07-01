@@ -446,8 +446,12 @@ static void cr_send_frame(cr_internal_t *self, cr_tx_task_t *task, uint8_t next_
     task->offset += payload_len;
     task->last_tick = self->hal->get_tick_ms();
 
+    /* 分片 SEQ 在本任务内连续递增,保证 RX 端严格顺序重组(seq==expected_seq)。
+     * 不从实例级 seq_counter 取值——否则广播/其它发送活动会在单播流内制造
+     * SEQ 空洞,导致接收端把后续分片判为乱序而丢弃。广播与新任务起始 SEQ
+     * 仍由各自的 seq_counter++ 分配,走独立的处理路径,互不干扰。 */
     if (is_multi && !is_last) {
-        task->seq = self->seq_counter++;
+        task->seq++;
     }
 }
 
