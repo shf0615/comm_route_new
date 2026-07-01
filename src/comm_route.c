@@ -556,9 +556,13 @@ void cr_poll(cr_instance_t *inst) {
                 if (task->retries >= self->cfg.max_retries) {
                     cr_finish_active_task(self, CR_STATUS_FAIL);
                 } else {
-                    /* Retransmit: rewind offset, resend from same block (not freed yet) */
+                    /* Retransmit: rewind offset AND seq to the current fragment.
+                     * cr_send_frame 已在发送后 task->seq++ 为下一片准备,故此处必须
+                     * 把 seq 恢复为当前片 SEQ(=ack_seq),否则重传帧会带着下一片的
+                     * SEQ,在"对端已收该片、仅 ACK 丢失"时被判为新一帧而重复存储。 */
                     task->retries++;
                     task->offset = task->frame_offset;
+                    task->seq = task->ack_seq;
                     task->state = TX_STATE_SENDING;
                     cr_send_frame(self, task, task->next_hop);
                     task->state = TX_STATE_WAIT_ACK;

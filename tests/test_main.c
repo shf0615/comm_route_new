@@ -98,6 +98,7 @@ extern void test_error_notify_send_done_null(void);
 extern void test_unicast_forward_ttl_not_decremented(void);
 extern void test_interrupt_mode_long_data_multi_frame(void);
 extern void test_broadcast_during_long_data_does_not_drop(void);
+extern void test_ack_lost_retransmit_no_data_corruption(void);
 
 /* test_len_field.c */
 extern void test_tx_fills_len_field(void);
@@ -223,6 +224,7 @@ int main(void) {
     RUN_TEST(test_unicast_forward_ttl_not_decremented);
     RUN_TEST(test_interrupt_mode_long_data_multi_frame);
     RUN_TEST(test_broadcast_during_long_data_does_not_drop);
+    RUN_TEST(test_ack_lost_retransmit_no_data_corruption);
     /* test_len_field.c */
     RUN_TEST(test_tx_fills_len_field);
     RUN_TEST(test_ack_frame_len_zero);

@@ -1214,3 +1214,109 @@ void test_broadcast_during_long_data_does_not_drop(void) {
     TEST_ASSERT_EQUAL_UINT16(130, gap_rx_len);
     TEST_ASSERT_EQUAL_UINT8_ARRAY(data, gap_rx_data, 130);
 }
+
+/* ===== 回归:ACK 丢失重传不应导致接收端数据错位 =====
+ * Bug: cr_poll 重传分支只回退 task->offset,未回退 task->seq;而 cr_send_frame
+ * 每次发送后 task->seq++。于是重传帧带着"当前片内容 + 下一片 SEQ"。若对端已
+ * 收到该片(仅 ACK 丢失),expected_seq 已推进,会把重传的当前片内容误存为下
+ * 一片,造成数据重复/错位(130B 变成 188B)。
+ * 修复:重传前恢复 task->seq = task->ack_seq(当前片原始 SEQ)。 */
+static cr_instance_t rtx_tx_inst;
+static cr_instance_t rtx_rx_inst;
+static uint8_t rtx_tx_buf[8192];
+static uint8_t rtx_rx_buf[8192];
+typedef struct { uint8_t frames[16][80]; uint16_t lens[16]; int count; } rtx_outbox_t;
+static rtx_outbox_t rtx_tx_out;
+static rtx_outbox_t rtx_rx_out;
+
+static int rtx_mock_send(void *ctx, uint8_t next_hop, const uint8_t *data, uint16_t len) {
+    (void)next_hop;
+    rtx_outbox_t *ob = (rtx_outbox_t *)ctx;
+    if (ob->count < 16 && len <= 80) {
+        memcpy(ob->frames[ob->count], data, len);
+        ob->lens[ob->count] = len;
+    }
+    ob->count++;
+    return 0;
+}
+
+static uint8_t rtx_rx_data[512];
+static uint16_t rtx_rx_len;
+static int rtx_rx_called;
+static void rtx_on_recv(cr_instance_t *inst, uint8_t src, uint8_t biz_id,
+                        const uint8_t *data, uint16_t len, void *ctx) {
+    (void)inst; (void)src; (void)biz_id; (void)ctx;
+    if (rtx_rx_called == 0 && len <= sizeof(rtx_rx_data)) {
+        memcpy(rtx_rx_data, data, len);
+        rtx_rx_len = len;
+    }
+    rtx_rx_called++;
+}
+
+void test_ack_lost_retransmit_no_data_corruption(void) {
+    cr_route_entry_t routes[] = { {.dest = 0x02, .next_hop = 0x02} };
+    cr_config_t tx_cfg = {
+        .local_addr = 0x01, .mtu = 64, .frame_interval_ms = 0,
+        .max_retries = 3, .ack_timeout_ms = 100, .ack_enabled = 1,
+        .ack_mode = CR_ACK_MODE_REPLY, .default_ttl = 3,
+        .tx_queue_depth = 4, .rx_assem_count = 2, .dedup_table_size = 16,
+        .rx_assem_timeout_ms = 5000, .rx_buf_per_slot = 512,
+        .pool_size = 32, .bcast_queue_depth = 4,
+        .route_table = routes, .route_count = 1,
+    };
+    TEST_ASSERT_EQUAL_INT(0, cr_init(&rtx_tx_inst, &tx_cfg, rtx_tx_buf, sizeof(rtx_tx_buf)));
+    cr_hal_t tx_hal = { .send = rtx_mock_send, .get_tick_ms = cov_mock_get_tick, .hw_ctx = &rtx_tx_out };
+    cr_set_hal(&rtx_tx_inst, &tx_hal);
+
+    cr_config_t rx_cfg = {
+        .local_addr = 0x02, .mtu = 64, .frame_interval_ms = 0,
+        .max_retries = 3, .ack_timeout_ms = 100, .ack_enabled = 1,
+        .ack_mode = CR_ACK_MODE_REPLY, .default_ttl = 3,
+        .tx_queue_depth = 4, .rx_assem_count = 2, .dedup_table_size = 16,
+        .rx_assem_timeout_ms = 5000, .rx_buf_per_slot = 512,
+        .pool_size = 32, .bcast_queue_depth = 4,
+        .route_table = NULL, .route_count = 0,
+    };
+    TEST_ASSERT_EQUAL_INT(0, cr_init(&rtx_rx_inst, &rx_cfg, rtx_rx_buf, sizeof(rtx_rx_buf)));
+    cr_hal_t rx_hal = { .send = rtx_mock_send, .get_tick_ms = cov_mock_get_tick, .hw_ctx = &rtx_rx_out };
+    cr_set_hal(&rtx_rx_inst, &rx_hal);
+    cr_set_recv_callback(&rtx_rx_inst, rtx_on_recv, NULL);
+
+    rtx_tx_out.count = 0;
+    rtx_rx_out.count = 0;
+    rtx_rx_called = 0;
+    rtx_rx_len = 0;
+    cov_mock_tick = 0;
+
+    /* 130 字节 → 3 片 (58 + 58 + 14) */
+    uint8_t data[130];
+    for (int i = 0; i < 130; i++) data[i] = (uint8_t)i;
+    TEST_ASSERT_EQUAL_INT(0, cr_send(&rtx_tx_inst, 0x02, 0, data, 130, NULL, NULL));
+
+    /* 片1 发出并送达 B,B 回 ACK0 —— 故意让 ACK0 丢失(不投递给 A) */
+    cr_poll(&rtx_tx_inst);                                                 /* A out[0]=片1 */
+    cr_feed_frame(&rtx_rx_inst, rtx_tx_out.frames[0], rtx_tx_out.lens[0]); /* B 收片1 → B out[0]=ACK0(丢弃) */
+
+    /* 超时,A 重传片1;B 识别为重复回 ACK0;这次 ACK 送达 A */
+    cov_mock_tick += 101;
+    cr_poll(&rtx_tx_inst);                                                 /* A out[1]=重传片1 */
+    cr_feed_frame(&rtx_rx_inst, rtx_tx_out.frames[1], rtx_tx_out.lens[1]); /* B out[1]=ACK0 */
+    cr_feed_frame(&rtx_tx_inst, rtx_rx_out.frames[1], rtx_rx_out.lens[1]); /* A 收 ACK0 → 推进 */
+
+    /* 片2 正常往返 */
+    cov_mock_tick += 1;
+    cr_poll(&rtx_tx_inst);                                                 /* A out[2]=片2 */
+    cr_feed_frame(&rtx_rx_inst, rtx_tx_out.frames[2], rtx_tx_out.lens[2]); /* B out[2]=ACK1 */
+    cr_feed_frame(&rtx_tx_inst, rtx_rx_out.frames[2], rtx_rx_out.lens[2]); /* A 收 ACK1 */
+
+    /* 片3(LAST)正常往返,B 交付 */
+    cov_mock_tick += 1;
+    cr_poll(&rtx_tx_inst);                                                 /* A out[3]=片3 LAST */
+    cr_feed_frame(&rtx_rx_inst, rtx_tx_out.frames[3], rtx_tx_out.lens[3]); /* B 交付 + B out[3]=ACK2 */
+    cr_feed_frame(&rtx_tx_inst, rtx_rx_out.frames[3], rtx_rx_out.lens[3]); /* A 收 ACK2 → finish */
+
+    /* 期望:B 恰好收到 130 字节,数据无错位(bug 下会收到 188B 且片1重复) */
+    TEST_ASSERT_EQUAL_INT(1, rtx_rx_called);
+    TEST_ASSERT_EQUAL_UINT16(130, rtx_rx_len);
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(data, rtx_rx_data, 130);
+}
